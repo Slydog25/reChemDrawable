@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/">
+        <file>src/qml/Main.qml</file>
+        <file>src/qml/MoleculeCanvas.qml</file>
+        <file>src/qml/Toolbar.qml</file>
+        <file>src/qml/ElementPalette.qml</file>
+        <file>src/qml/RingTemplatePicker.qml</file>
+        <file>src/qml/ToolbarIcon.qml</file>
+    </qresource>
+</RCC>
+

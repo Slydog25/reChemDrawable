@@ -1,0 +1,17 @@
+{
+  "name": "reChemDrawable Qt",
+  "build": {
+    "dockerfile": "../packaging/docker/Dockerfile.desktop",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cmake-tools",
+        "llvm-vs-code-extensions.vscode-clangd"
+      ]
+    }
+  }
+}

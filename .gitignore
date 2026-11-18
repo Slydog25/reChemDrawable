@@ -1,0 +1,7 @@
+build/
+build-*/
+*.user
+*.autosave
+.DS_Store
+
+*.tar.gz

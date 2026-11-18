@@ -1,0 +1,133 @@
+import QtQuick
+import QtQuick.Controls
+
+Rectangle {
+    id: root
+
+    property string activeTool: "draw"
+    property bool touchDrawingEnabled: true
+    property bool gridSnapEnabled: false
+    signal toolSelected(string tool)
+    signal undoRequested()
+    signal redoRequested()
+    signal clearRequested()
+    signal saveRequested()
+    signal loadRequested()
+    signal exportSvgRequested()
+    signal cleanupRequested()
+    signal rotateRequested()
+    signal deleteSelectionRequested()
+    signal saveSchemeRequested()
+    signal loadSchemeRequested()
+    signal copyRequested()
+    signal pasteRequested()
+    signal mirrorRequested(bool horizontal)
+    signal alignRequested(string alignment)
+    signal touchDrawingToggled(bool enabled)
+    signal gridSnapToggled(bool enabled)
+
+    implicitWidth: 252
+    color: "#f7f5ed"
+    border.color: "#171717"
+    border.width: 2
+    radius: 12
+
+    component RailButton: Button {
+        id: button
+        property string iconName: ""
+        property string caption: ""
+        property bool selected: false
+        width: 106
+        height: 96
+        checkable: selected
+
+        background: Rectangle {
+            radius: 9
+            color: button.selected ? "#171717" : (button.down ? "#d6d2c5" : "#ffffff")
+            border.color: "#171717"
+            border.width: 2
+        }
+        contentItem: Item {
+            Column {
+            width: parent.width
+            spacing: 1
+            anchors.verticalCenter: parent.verticalCenter
+            ToolbarIcon {
+                anchors.horizontalCenter: parent.horizontalCenter
+                name: button.iconName
+                ink: button.selected ? "#ffffff" : "#111111"
+            }
+            Text {
+                width: parent.width
+                text: button.caption
+                color: button.selected ? "#ffffff" : "#111111"
+                font.pixelSize: 15
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+            }
+        }
+    }
+
+    Flickable {
+        anchors.fill: parent
+        anchors.margins: 12
+        clip: true
+        contentWidth: width
+        contentHeight: toolGrid.height
+        boundsBehavior: Flickable.StopAtBounds
+
+        Grid {
+            id: toolGrid
+            width: parent.width
+            columns: 2
+            spacing: 10
+
+            Repeater {
+                model: [
+                    ["draw", "draw", "Draw"], ["select", "select", "Select"],
+                    ["move", "move", "Move"], ["pan", "pan", "Pan"],
+                    ["bond", "bond", "Bond"], ["stereo", "style", "Style"],
+                    ["ring", "ring", "Ring"], ["arrow", "arrow", "Arrow"],
+                    ["label", "text", "Text"], ["erase", "erase", "Erase"]
+                ]
+                delegate: RailButton {
+                    iconName: modelData[1]
+                    caption: modelData[2]
+                    selected: root.activeTool === modelData[0]
+                    onClicked: root.toolSelected(modelData[0])
+                }
+            }
+
+            RailButton { iconName: "undo"; caption: "Undo"; onClicked: root.undoRequested() }
+            RailButton { iconName: "redo"; caption: "Redo"; onClicked: root.redoRequested() }
+            RailButton {
+                iconName: "touch"
+                caption: "Touch"
+                selected: root.touchDrawingEnabled
+                onClicked: root.touchDrawingToggled(!root.touchDrawingEnabled)
+            }
+            RailButton {
+                iconName: "grid"
+                caption: "Snap grid"
+                selected: root.gridSnapEnabled
+                onClicked: root.gridSnapToggled(!root.gridSnapEnabled)
+            }
+            RailButton { iconName: "load"; caption: "Load"; onClicked: root.loadRequested() }
+            RailButton { iconName: "save"; caption: "Save"; onClicked: root.saveRequested() }
+            RailButton { iconName: "scheme"; caption: "Scheme +"; onClicked: root.saveSchemeRequested() }
+            RailButton { iconName: "scheme"; caption: "Scheme −"; onClicked: root.loadSchemeRequested() }
+            RailButton { iconName: "svg"; caption: "SVG"; onClicked: root.exportSvgRequested() }
+            RailButton { iconName: "clean"; caption: "Clean"; onClicked: root.cleanupRequested() }
+            RailButton { iconName: "rotate"; caption: "Rotate"; onClicked: root.rotateRequested() }
+            RailButton { iconName: "flipH"; caption: "Flip H"; onClicked: root.mirrorRequested(true) }
+            RailButton { iconName: "flipV"; caption: "Flip V"; onClicked: root.mirrorRequested(false) }
+            RailButton { iconName: "alignH"; caption: "Align H"; onClicked: root.alignRequested("horizontal") }
+            RailButton { iconName: "alignV"; caption: "Align V"; onClicked: root.alignRequested("vertical") }
+            RailButton { iconName: "copy"; caption: "Copy"; onClicked: root.copyRequested() }
+            RailButton { iconName: "paste"; caption: "Paste"; onClicked: root.pasteRequested() }
+            RailButton { iconName: "delete"; caption: "Delete"; onClicked: root.deleteSelectionRequested() }
+            RailButton { iconName: "clear"; caption: "Clear"; onClicked: root.clearRequested() }
+        }
+    }
+}
