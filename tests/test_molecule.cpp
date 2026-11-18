@@ -299,6 +299,40 @@ private slots:
         QVERIFY(methylCation.setAtomCharge(methylCation.addAtom(0, 0), 1));
         QCOMPARE(methylCation.formula(), QString("CH3+"));
     }
+    void countsHydrogensOnSulfurAndPhosphorus() {
+        Molecule thiol;
+        const int thiolSulfur = thiol.addAtom(48, 0, "S");
+        thiol.addBond(thiol.addAtom(0, 0), thiolSulfur);
+        QCOMPARE(thiol.formula(), QString("CH4S"));
+        QVERIFY(qAbs(thiol.properties().value("molecularWeight").toDouble() - 48.103) < 0.01);
+
+        Molecule sulfoxide;
+        const int sulfur = sulfoxide.addAtom(0, 0, "S");
+        sulfoxide.addBond(sulfur, sulfoxide.addAtom(-48, 0));
+        sulfoxide.addBond(sulfur, sulfoxide.addAtom(48, 0));
+        sulfoxide.addBond(sulfur, sulfoxide.addAtom(0, -48, "O"), 2);
+        QCOMPARE(sulfoxide.formula(), QString("C2H6OS"));
+        sulfoxide.addBond(sulfur, sulfoxide.addAtom(0, 48, "O"), 2);
+        QCOMPARE(sulfoxide.formula(), QString("C2H6O2S"));
+
+        Molecule thiolate;
+        const int thiolateSulfur = thiolate.addAtom(48, 0, "S");
+        thiolate.addBond(thiolate.addAtom(0, 0), thiolateSulfur);
+        QVERIFY(thiolate.setAtomCharge(thiolateSulfur, -1));
+        QCOMPARE(thiolate.formula(), QString("CH3S-"));
+
+        Molecule phosphine;
+        const int phosphineP = phosphine.addAtom(48, 0, "P");
+        phosphine.addBond(phosphine.addAtom(0, 0), phosphineP);
+        QCOMPARE(phosphine.formula(), QString("CH5P"));
+
+        Molecule phosphoricAcid;
+        const int phosphorus = phosphoricAcid.addAtom(0, 0, "P");
+        phosphoricAcid.addBond(phosphorus, phosphoricAcid.addAtom(0, -48, "O"), 2);
+        for (int index = 0; index < 3; ++index)
+            phosphoricAcid.addBond(phosphorus, phosphoricAcid.addAtom(48 * index - 48, 48, "O"));
+        QCOMPARE(phosphoricAcid.formula(), QString("H3O4P"));
+    }
     void preservesWavyBondsInMolfiles() {
         Molecule source;
         const int a = source.addAtom(0, 0);

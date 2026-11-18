@@ -598,7 +598,7 @@ QString Molecule::formula() const {
     QMap<QString, int> counts;
     for (const Atom &atom : m_atoms) {
         counts[atom.element] += 1;
-        const int implicitHydrogen = qMax(0, maxValence(atom) - valenceUsed(atom.id));
+        const int implicitHydrogen = implicitHydrogens(atom);
         if (atom.element != QStringLiteral("H")) counts[QStringLiteral("H")] += implicitHydrogen;
     }
     QString result;
@@ -631,7 +631,7 @@ QVariantMap Molecule::properties() const {
         molecularWeight += averageMass.value(atom.element);
         exactMass += atom.isotope ? atom.isotope : monoisotopicMass.value(atom.element);
         if (atom.element != QStringLiteral("H")) {
-            const int hydrogen = qMax(0, maxValence(atom) - valenceUsed(atom.id));
+            const int hydrogen = implicitHydrogens(atom);
             molecularWeight += hydrogen * averageMass.value(QStringLiteral("H"));
             exactMass += hydrogen * monoisotopicMass.value(QStringLiteral("H"));
         }
@@ -740,6 +740,24 @@ int Molecule::maxValence(const QString &element, int charge) const {
 }
 
 int Molecule::maxValence(const Atom &atom) const { return maxValence(atom.element, atom.formalCharge); }
+
+int Molecule::implicitHydrogens(const Atom &atom) const {
+    if (atom.element == QStringLiteral("H")) return 0;
+    const int used = valenceUsed(atom.id);
+    // Sulfur and phosphorus have several normal valences; fill hydrogens up to the
+    // lowest one that fits the drawn bonds (thiol SH, sulfoxide, sulfone; phosphine,
+    // phosphate) instead of the hypervalent maximum. Charge shifts each valence the
+    // same way it shifts maxValence for group 15-17 atoms.
+    static const QHash<QString, QVector<int>> normalValences = {
+        {QStringLiteral("S"), {2, 4, 6}}, {QStringLiteral("P"), {3, 5}}};
+    const auto found = normalValences.constFind(atom.element);
+    if (found == normalValences.cend()) return qMax(0, maxValence(atom) - used);
+    for (const int valence : *found) {
+        const int adjusted = valence + atom.formalCharge;
+        if (adjusted >= used) return adjusted - used;
+    }
+    return 0;
+}
 
 Molecule::Snapshot Molecule::snapshot() const { return {m_atoms, m_bonds, m_nextAtomId, m_nextBondId}; }
 void Molecule::restore(const Snapshot &value) { m_atoms = value.atoms; m_bonds = value.bonds; m_nextAtomId = value.nextAtomId; m_nextBondId = value.nextBondId; }

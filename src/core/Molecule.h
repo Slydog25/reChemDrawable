@@ -85,6 +85,7 @@ private:
     int valenceUsed(int atomId) const;
     int maxValence(const QString &element, int charge = 0) const;
     int maxValence(const Atom &atom) const;
+    int implicitHydrogens(const Atom &atom) const;
     Snapshot snapshot() const;
     void restore(const Snapshot &snapshot);
     void commit(const Snapshot &before);
