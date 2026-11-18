@@ -10,17 +10,23 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-# python3, xz-utils and file are what the Yocto-style SDK installer needs.
+# python3, file, and xz/zstd/unzip are what the Yocto-style SDK installer
+# checks for; it also forces LC_ALL=en_US.UTF-8, so that locale must exist.
 # cmake and ninja are a fallback if the SDK does not ship its own CMake.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     cmake \
     file \
+    locales \
     make \
     ninja-build \
     python3 \
+    unzip \
     xz-utils \
+    zstd \
+    && sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen \
     && rm -rf /var/lib/apt/lists/*
+ENV LANG=en_US.UTF-8
 
 ARG SDK_INSTALLER
 COPY ${SDK_INSTALLER} /tmp/sdk-installer.sh

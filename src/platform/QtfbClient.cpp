@@ -159,7 +159,8 @@ void QtfbClient::present(const QImage &image) {
     writeU32(update + 12, 0);
     writeU32(update + 16, width_);
     writeU32(update + 20, height_);
-    (void)::write(socketFd_, update, sizeof(update));
+    if (::write(socketFd_, update, sizeof(update)) != static_cast<ssize_t>(sizeof(update)))
+        qWarning() << "qtfb: display update request failed";
 }
 
 bool QtfbClient::pollInput(QtfbInputEvent &event) {
