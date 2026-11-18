@@ -1,0 +1,33 @@
+# Paper Pro (ferrari) cross-build image built from reMarkable's official SDK.
+#
+# The SDK installer is not downloaded here: its version must match the tablet's
+# software version. Put the matching installer in packaging/docker/sdk/ and run
+# ./build-rmpp-docker.sh, which passes it in as the build context. See
+# packaging/docker/README.md.
+#
+# reMarkable publishes ferrari SDKs for x86_64 hosts and, from software
+# 3.27.0.97, for aarch64 hosts too, so Apple Silicon Macs can build natively.
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+# python3, xz-utils and file are what the Yocto-style SDK installer needs.
+# cmake and ninja are a fallback if the SDK does not ship its own CMake.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    cmake \
+    file \
+    make \
+    ninja-build \
+    python3 \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG SDK_INSTALLER
+COPY ${SDK_INSTALLER} /tmp/sdk-installer.sh
+RUN chmod +x /tmp/sdk-installer.sh \
+    && /tmp/sdk-installer.sh -y -d /opt/rmpp-sdk \
+    && rm /tmp/sdk-installer.sh \
+    && ls /opt/rmpp-sdk/environment-setup-* >/dev/null
+
+WORKDIR /workspace
+CMD ["bash"]

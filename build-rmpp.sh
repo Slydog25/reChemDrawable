@@ -16,6 +16,13 @@ case "$target" in
 esac
 
 build_dir="build-rmpp"
-cmake -S . -B "$build_dir" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+set -- -S . -B "$build_dir" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
     -DRECHEMDRAW_EXTERNAL_QML=ON
+# The SDK's environment script exports its CMake toolchain file (and sets a
+# `cmake` alias that adds it, but aliases do not reach scripts). Pass it on so
+# CMake finds the tablet's Qt in the SDK sysroot rather than any host Qt.
+if [ -n "${OE_CMAKE_TOOLCHAIN_FILE:-}" ]; then
+    set -- "$@" "-DCMAKE_TOOLCHAIN_FILE=$OE_CMAKE_TOOLCHAIN_FILE"
+fi
+cmake "$@"
 cmake --build "$build_dir" --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-1}"

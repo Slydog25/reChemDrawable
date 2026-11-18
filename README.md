@@ -28,7 +28,9 @@ The executable is placed in `build-pc/`. The script also runs the core tests and
 
 ## Paper Pro build
 
-The device SDK setup is intentionally not hard-coded: source the environment script supplied by the SDK that matches the tablet firmware, then run `./build-rmpp.sh` in that same shell. The script checks that the selected compiler targets aarch64 Linux and stops otherwise.
+From macOS or Linux, with Docker: download the ferrari SDK installer that matches the tablet's software version into `packaging/docker/sdk/`, then run `./build-rmpp-docker.sh`. Details are in [packaging/docker/README.md](packaging/docker/README.md).
+
+Inside an already-sourced SDK shell, `./build-rmpp.sh` does the same build directly. It checks that the compiler targets aarch64 Linux and passes the SDK's CMake toolchain file to CMake.
 
 Before deploying, copy the manifest format from the installed AppLoad release into `packaging/appload/external.manifest.json`; AppLoad metadata is community-tool-version-specific and must be validated on the actual device.
 

@@ -18,12 +18,27 @@ CMake Tools and clangd.
 
 ## Paper Pro cross-build
 
-Build the base shell with:
+`Dockerfile.rmpp` installs reMarkable's official Paper Pro (codename **ferrari**)
+SDK into an image, and `./build-rmpp-docker.sh` builds the tablet binary in it.
+This works on macOS as well as Linux; no separate Linux machine is needed.
 
-```sh
-docker build -t rechemdraw-rmpp-build packaging/docker
-```
+1. Find your tablet's software version under **Settings > General > About**.
+2. From <https://developer.remarkable.com/links>, download the ferrari
+   toolchain for that exact version into `packaging/docker/sdk/` (ignored by
+   git). On an Apple Silicon Mac take the `aarch64` installer, published from
+   software 3.27.0.97 on, so the build runs without emulation; otherwise take
+   the `x86_64` one. They are roughly 400 MB.
+3. Run:
 
-Run it while mounting both this checkout and the **firmware-matched official Paper Pro SDK**. Inside the container, source that SDK's `environment-setup-*` script before invoking `/workspace/build-rmpp.sh`.
+   ```sh
+   ./build-rmpp-docker.sh
+   ```
 
-The SDK is intentionally not downloaded or baked into the image: its version must match the tablet firmware and its installer is distributed by reMarkable.
+   It picks the newest ferrari installer in `packaging/docker/sdk/` (or the
+   one passed as an argument), builds one image per SDK version, and writes
+   `build-rmpp/reChemDrawable`.
+4. Deploy over USB with `packaging/appload/deploy-appload.sh` (see
+   `packaging/appload/README.md`).
+
+The SDK is not downloaded automatically: it must match the tablet's software
+version, and it is distributed by reMarkable.
