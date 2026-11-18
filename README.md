@@ -7,27 +7,28 @@ The current milestone is a desktop Qt Quick prototype with a testable C++ molecu
 ## What works in this foundation
 
 - Stable atom and bond IDs, graph editing, hit testing, atom movement, and undo/redo.
-- Element labels, formal charges, isotopes, single/double/triple/aromatic bonds, and wedge/dash/wavy bond styles.
-- Formula, molecular weight, and exact-mass summaries for the drawn structure.
-- MDL Molfile V2000 read/write with charge, isotope, aromatic, and wedge/dash/wavy preservation, plus SVG export.
-- A monochrome QML editor with tap-to-place/tap-to-connect editing, drag-to-move, pan, wheel zoom, and common fragment stamps (OH, NH2, Me, COOH, CN, NO2, tBu, and Ph).
+- Element labels (C, H, B, N, O, F, Si, P, S, Cl, Se, Br, I, Li, Na, K, Mg), formal charges, isotopes, single/double/triple/aromatic bonds, and wedge/dash/wavy bond styles.
+- Formula (isotope labels shown as e.g. `[13C]`), molecular weight, and exact-mass summaries for the drawn structure.
+- MDL Molfile V2000 read/write with charge, isotope, aromatic, and wedge/dash/wavy preservation, plus SVG and SMILES export.
+- A monochrome QML editor with tap-to-place/tap-to-connect editing, drag-to-move, pan, zoom buttons and Fit (plus wheel and pinch zoom on desktop), and common fragment stamps (OH, NH2, Me, COOH, CN, NO2, tBu, and Ph).
+- **Clean** straightens bond lengths and angles: 120° in chains, 180° beside triple bonds, and regular-polygon angles in rings.
 - Box selection, multi-atom move/rotate/mirror/align/delete, and copy/paste of complete selected fragments; desktop builds also accept the standard undo/redo and copy/paste keyboard shortcuts.
 - One undo/redo timeline covering both structure edits and reaction arrows/labels; **Clear** undoes in a single step.
-- Reaction-scheme arrows and condition/reagent text labels, saved together with the molecule in a portable `.rcd` JSON document and included in SVG scheme export.
+- Reaction-scheme arrows and condition/reagent text labels, saved together with the molecule in a portable `.rcd` JSON document and included in SVG scheme export. Common labels (Δ, hν, rt, reagents, solvents) are one tap away, since the tablet has no keyboard.
 
 ## Desktop build
 
-Install Qt 6 with the Core, Gui, Qml, Quick, and Test components, then run:
+Install Qt 6 with the Core, Gui, Qml, Quick, Test, and QuickTest components, then run:
 
 ```sh
 ./build-pc.sh
 ```
 
-The executable is placed in `build-pc/`. To build and test without installing Qt on the host, use the Docker image described in [AGENTS.md](AGENTS.md).
+The executable is placed in `build-pc/`. The script also runs the core tests and the QML canvas tests. To build and test without installing Qt on the host, use the Docker image described in [AGENTS.md](AGENTS.md); GitHub Actions runs the same steps on every push.
 
 ## Paper Pro build
 
-The device SDK setup is intentionally not hard-coded: source the environment script supplied by the SDK that matches the tablet firmware, then run `./build-rmpp.sh` in that same shell. The script verifies that the selected compiler targets aarch64.
+The device SDK setup is intentionally not hard-coded: source the environment script supplied by the SDK that matches the tablet firmware, then run `./build-rmpp.sh` in that same shell. The script checks that the selected compiler targets aarch64 Linux and stops otherwise.
 
 Before deploying, copy the manifest format from the installed AppLoad release into `packaging/appload/external.manifest.json`; AppLoad metadata is community-tool-version-specific and must be validated on the actual device.
 
@@ -35,17 +36,15 @@ Before deploying, copy the manifest format from the installed AppLoad release in
 
 Canvas coordinates use a 48-pixel standard bond length. Molfile export converts these into 1.0-unit 2D coordinates and flips the Y axis, so structures retain their proportions in desktop chemistry tools. Atoms are always explicit in the graph and in Molfiles; carbon labels are merely hidden in the renderer.
 
-Valence checking is intentionally lightweight. It prevents common accidental over-bonding and accounts for formal charge (N⁺ and O⁺ may carry one more bond, C⁺/C⁻ and anions one fewer), but does not attempt aromaticity perception, charge balancing, canonical SMILES, or 3D chemistry.
+Valence checking is intentionally lightweight. It prevents common accidental over-bonding and accounts for formal charge (N⁺ and O⁺ may carry one more bond, C⁺/C⁻ and anions one fewer), but does not attempt aromaticity perception, charge balancing, canonical SMILES, or 3D chemistry. SMILES export follows drawing order (it is not canonical) and does not encode wedge/dash stereo.
 
 ## Saving and reopening
 
-The in-app **Save** and **Load** controls use a single predictable file named
-`structure.mol` inside the platform's Documents folder under `reChemDrawable/`.
-This is deliberately a v1 choice for the keyboard-free Paper Pro workflow. The
-core also exposes path-based load/save methods, so a future file-picker or sync
-integration can use arbitrary `.mol` locations without changing the format.
+Drawings live in `reChemDrawable/` inside the platform's Documents folder.
 
-For reaction diagrams, **Save scheme** and **Load scheme** use `reaction-scheme.rcd` in
-the same folder. An `.rcd` preserves both the embedded Molfile and the editor's arrows
-and text labels; it is the native document format, while `.mol` remains the interchange
-format for an individual molecular structure.
+- **Save** writes the drawing as an `.rcd` file (the structure plus arrows and labels). A new drawing gets a timestamped name such as `drawing-20261118-1530.rcd`; later saves update that same file. The title bar shows the name, with `•` while there are unsaved changes.
+- **Open** lists the `.rcd` and `.mol` files in that folder, newest first. Opening a `.mol` starts a drawing without annotations, and saving it creates a separate `.rcd`, so the original Molfile is never overwritten.
+- **New**, **Open**, and closing the window ask before discarding unsaved changes.
+- **.mol**, **SVG**, and **SMILES** write exports named after the drawing into the `exports/` subfolder.
+
+Files saved by older builds (`structure.mol`, `reaction-scheme.rcd`) appear in the Open list.

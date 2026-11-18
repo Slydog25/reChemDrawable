@@ -10,7 +10,7 @@ Flow {
     spacing: 8
     Label { text: "Atoms"; font.pixelSize: 19; font.bold: true; height: 58; verticalAlignment: Text.AlignVCenter }
     Repeater {
-        model: ["C", "O", "N", "S", "P", "F", "Cl", "Br", "I"]
+        model: ["C", "O", "N", "S", "P", "F", "Cl", "Br", "I", "B", "Si", "Se", "Li", "Na", "K", "Mg"]
         delegate: Button {
             text: modelData
             width: modelData.length > 1 ? 66 : 56

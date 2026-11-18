@@ -32,4 +32,5 @@ private:
     std::size_t sharedMemorySize_ = 0;
     int width_ = 0;
     int height_ = 0;
+    QImage lastFrame_;
 };

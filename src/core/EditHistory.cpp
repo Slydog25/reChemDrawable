@@ -57,6 +57,9 @@ void EditHistory::record(Layer layer) {
         return;
     }
     m_undo.append(Step{layer});
+    // Each layer keeps at most its own MaxUndoSteps; tags older than that would
+    // only be skipped by undo(), so don't keep many more of them.
+    if (m_undo.size() > MaxSteps) m_undo.removeFirst();
     m_redo.clear();
 }
 

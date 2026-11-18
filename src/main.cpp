@@ -1,7 +1,9 @@
+#include "core/Document.h"
 #include "core/EditHistory.h"
 #include "core/Molecule.h"
 #include "core/ReactionLayer.h"
 #include "platform/InputSettings.h"
+#include "platform/QmlJitWorkaround.h"
 #include "platform/QtfbClient.h"
 
 #include <QGuiApplication>
@@ -20,15 +22,18 @@ constexpr int PaperProHeight = 2160;
 }
 
 int main(int argc, char *argv[]) {
+    avoidQmlJitOnPointerAuthCpus();
     QGuiApplication app(argc, argv);
     QQmlApplicationEngine engine;
     Molecule molecule;
     ReactionLayer reactionLayer(&molecule);
     EditHistory editHistory(&molecule, &reactionLayer);
+    Document document(&molecule, &reactionLayer);
     InputSettings inputSettings;
     engine.rootContext()->setContextProperty(QStringLiteral("molecule"), &molecule);
     engine.rootContext()->setContextProperty(QStringLiteral("reactionLayer"), &reactionLayer);
     engine.rootContext()->setContextProperty(QStringLiteral("editHistory"), &editHistory);
+    engine.rootContext()->setContextProperty(QStringLiteral("document"), &document);
     engine.rootContext()->setContextProperty(QStringLiteral("inputSettings"), &inputSettings);
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
 #ifdef RECHEMDRAW_EXTERNAL_QML

@@ -46,13 +46,15 @@ ApplicationWindow {
                 onUndoRequested: editHistory.undo()
                 onRedoRequested: editHistory.redo()
                 onClearRequested: { editHistory.clearAll(); window.selectedAtom = -1 }
-                onSaveRequested: {
-                    // A .mol file holds only the structure; say so instead of dropping annotations silently.
-                    if (molecule.saveDefaultMolfile() && reactionLayer.items().length > 0)
-                        statusLine.text = "Saved the structure only. Use Scheme + to keep arrows and labels."
-                }
-                onLoadRequested: { molecule.loadDefaultMolfile(); window.selectedAtom = -1 }
-                onExportSvgRequested: reactionLayer.saveDefaultSvg()
+                onNewRequested: window.confirmDiscard(function() { document.newDocument(); window.selectedAtom = -1 })
+                onOpenRequested: openDialog.open()
+                onSaveRequested: document.save()
+                onExportMolRequested: document.exportMolfile()
+                onExportSvgRequested: document.exportSvg()
+                onExportSmilesRequested: document.exportSmiles()
+                onZoomInRequested: editor.zoomIn()
+                onZoomOutRequested: editor.zoomOut()
+                onFitRequested: editor.fitToContent()
                 onCleanupRequested: molecule.cleanUpStructure()
                 onRotateRequested: editor.rotateSelection()
                 onDeleteSelectionRequested: editor.deleteSelection()
@@ -60,8 +62,6 @@ ApplicationWindow {
                 onPasteRequested: editor.pasteSelection()
                 onMirrorRequested: function(horizontal) { editor.mirrorSelection(horizontal) }
                 onAlignRequested: function(alignment) { editor.alignSelection(alignment) }
-                onSaveSchemeRequested: reactionLayer.saveDefaultScheme()
-                onLoadSchemeRequested: { reactionLayer.loadDefaultScheme(); window.selectedAtom = -1 }
             }
 
             ColumnLayout {
@@ -77,10 +77,18 @@ ApplicationWindow {
                         font.bold: true
                         color: "#111111"
                     }
+                    Label {
+                        objectName: "documentTitle"
+                        // "•" marks unsaved changes.
+                        text: document.title + (document.dirty ? " •" : "")
+                        color: "#5a5a55"
+                        font.pixelSize: 22
+                        Layout.leftMargin: 12
+                    }
                     Item { Layout.fillWidth: true }
                     Label {
-                        text: editor.selectedAtoms.length > 0 ? moleculeProperties.formula + "  •  MW " + Number(moleculeProperties.molecularWeight).toFixed(2) :
-                              (window.selectedAtom < 0 ? "Tap an atom to begin a bond" : "Atom " + window.selectedAtom + " selected")
+                        text: moleculeProperties.atomCount > 0 ? moleculeProperties.formula + "  •  MW " + Number(moleculeProperties.molecularWeight).toFixed(2) :
+                              "Tap the canvas to place an atom"
                         color: "#252525"
                         font.pixelSize: 19
                     }
@@ -110,6 +118,24 @@ ApplicationWindow {
                         onTextChanged: window.reactionLabel = text
                     }
                     Item { Layout.fillWidth: true }
+                }
+                // Tap-only label choices, since the tablet build has no on-screen keyboard.
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Label { text: "Labels"; font.pixelSize: 19; font.bold: true; height: 52; verticalAlignment: Text.AlignVCenter }
+                    Repeater {
+                        model: ["Δ", "hν", "rt", "0 °C", "reflux", "H₂O", "H₃O⁺", "NaOH", "HCl", "H₂, Pd/C",
+                                "NaBH₄", "LiAlH₄", "THF", "EtOH", "cat."]
+                        delegate: Button {
+                            text: modelData
+                            height: 52
+                            font.pixelSize: 18
+                            checkable: true
+                            checked: window.activeTool === "label" && window.reactionLabel === modelData
+                            onClicked: { reactionLabelField.text = modelData; window.activeTool = "label" }
+                        }
+                    }
                 }
 
                 MoleculeCanvas {
@@ -147,6 +173,100 @@ ApplicationWindow {
     Connections {
         target: reactionLayer
         function onMessage(text) { statusLine.text = text }
+    }
+
+    Connections {
+        target: document
+        function onMessage(text) { statusLine.text = text }
+    }
+
+    // Runs `action` now, or after the user agrees to drop unsaved changes.
+    property var pendingAction: null
+    function confirmDiscard(action) {
+        if (!document.dirty) { action(); return }
+        pendingAction = action
+        discardDialog.open()
+    }
+    function runPendingAction() {
+        const action = pendingAction
+        pendingAction = null
+        discardDialog.close()
+        if (action) action()
+    }
+
+    onClosing: function(close) {
+        if (!document.dirty) return
+        close.accepted = false
+        confirmDiscard(Qt.quit)
+    }
+
+    Popup {
+        id: discardDialog
+        objectName: "discardDialog"
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: 560
+        padding: 24
+        onClosed: window.pendingAction = null
+        contentItem: ColumnLayout {
+            spacing: 18
+            Label {
+                Layout.fillWidth: true
+                text: "“" + document.title + "” has unsaved changes."
+                font.pixelSize: 22
+                wrapMode: Text.WordWrap
+            }
+            RowLayout {
+                spacing: 12
+                Button { text: "Save"; font.pixelSize: 20; Layout.preferredHeight: 60; onClicked: if (document.save()) window.runPendingAction() }
+                Button { text: "Discard"; font.pixelSize: 20; Layout.preferredHeight: 60; onClicked: window.runPendingAction() }
+                Button { text: "Cancel"; font.pixelSize: 20; Layout.preferredHeight: 60; onClicked: discardDialog.close() }
+            }
+        }
+    }
+
+    Popup {
+        id: openDialog
+        objectName: "openDialog"
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(window.width - 80, 720)
+        height: Math.min(window.height - 80, 760)
+        padding: 20
+        property var entries: []
+        onAboutToShow: entries = document.documents()
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label { text: "Open a drawing"; font.pixelSize: 26; font.bold: true }
+            Label {
+                Layout.fillWidth: true
+                visible: openDialog.entries.length === 0
+                text: "No saved drawings yet in " + document.directory
+                font.pixelSize: 18
+                wrapMode: Text.WrapAnywhere
+            }
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 8
+                model: openDialog.entries
+                delegate: Button {
+                    width: ListView.view.width
+                    height: 72
+                    font.pixelSize: 20
+                    text: modelData.name + "    " + modelData.modified + (modelData.kind === "molfile" ? "    .mol" : "")
+                    onClicked: {
+                        const path = modelData.path
+                        openDialog.close()
+                        window.confirmDiscard(function() {
+                            if (document.open(path)) { window.selectedAtom = -1; editor.fitToContent() }
+                        })
+                    }
+                }
+            }
+            Button { text: "Cancel"; font.pixelSize: 20; Layout.preferredHeight: 60; onClicked: openDialog.close() }
+        }
     }
 
     Component.onCompleted: moleculeProperties = molecule.properties()

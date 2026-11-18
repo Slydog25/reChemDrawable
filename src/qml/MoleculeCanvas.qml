@@ -64,6 +64,10 @@ Rectangle {
         case "F": case "Cl": return "#148542"
         case "Br": return "#8b3f20"
         case "I": return "#7045a8"
+        case "B": return "#b0565a"
+        case "Si": return "#8a6d3b"
+        case "Se": return "#a05a00"
+        case "Li": case "Na": case "K": case "Mg": return "#5b3fa0"
         default: return "#252525"
         }
     }
@@ -89,8 +93,11 @@ Rectangle {
         return center
     }
 
+    // One bond length in canvas units, from GeometryEngine::StandardBondLength.
+    readonly property real bondLength: molecule.standardBondLength
+
     function snapToHexGrid(x, y) {
-        const spacing = 48
+        const spacing = bondLength
         const rowHeight = spacing * Math.sqrt(3) / 2
         const row = Math.round(y / rowHeight)
         const offset = Math.abs(row) % 2 ? spacing / 2 : 0
@@ -103,39 +110,55 @@ Rectangle {
     }
 
     function suggestedBondEnd(atomId) {
-        const atom = atomById(atomId)
-        if (!atom) return { x: 0, y: 0 }
-        const occupied = []
-        for (let index = 0; index < bondItems.length; ++index) {
-            const bond = bondItems[index]
-            const neighborId = bond.atomA === atomId ? bond.atomB : bond.atomB === atomId ? bond.atomA : -1
-            const neighbor = atomById(neighborId)
-            if (neighbor) occupied.push(Math.atan2(neighbor.y - atom.y, neighbor.x - atom.x))
-        }
-        if (!occupied.length) return { x: atom.x + 48, y: atom.y }
-        let bestAngle = 0
-        let bestClearance = -1
-        for (let candidate = 0; candidate < 12; ++candidate) {
-            const angle = candidate * Math.PI * 2 / 12
-            let clearance = Math.PI * 2
-            for (let index = 0; index < occupied.length; ++index) {
-                const difference = Math.abs(Math.atan2(Math.sin(angle - occupied[index]), Math.cos(angle - occupied[index])))
-                clearance = Math.min(clearance, difference)
-            }
-            if (clearance > bestClearance) { bestClearance = clearance; bestAngle = angle }
-        }
-        return { x: atom.x + Math.cos(bestAngle) * 48, y: atom.y + Math.sin(bestAngle) * 48 }
+        const point = molecule.suggestedBondEnd(atomId)
+        return { x: point.x, y: point.y }
     }
 
     function modelPoint(x, y) {
         return { x: (x - panX) / zoom, y: (y - panY) / zoom }
     }
 
+    readonly property real minimumZoom: 0.35
+    readonly property real maximumZoom: 3.0
+
     function zoomAt(factor, x, y) {
+        zoomTo(zoom * factor, x, y)
+    }
+
+    // Sets the zoom while keeping the model point under (x, y) in place.
+    function zoomTo(value, x, y) {
         const before = modelPoint(x, y)
-        zoom = Math.max(0.35, Math.min(3.0, zoom * factor))
+        zoom = Math.max(minimumZoom, Math.min(maximumZoom, value))
         panX = x - before.x * zoom
         panY = y - before.y * zoom
+        drawing.requestPaint()
+    }
+
+    function zoomIn() { zoomAt(1.25, width / 2, height / 2) }
+    function zoomOut() { zoomAt(1 / 1.25, width / 2, height / 2) }
+
+    // Centers the drawing and zooms so all of it fits, up to 1:1 for small drawings.
+    function fitToContent() {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        const include = function(x, y) {
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x)
+            minY = Math.min(minY, y); maxY = Math.max(maxY, y)
+        }
+        for (let i = 0; i < atomItems.length; ++i) include(atomItems[i].x, atomItems[i].y)
+        for (let i = 0; i < reactionItems.length; ++i) {
+            include(reactionItems[i].x1, reactionItems[i].y1)
+            include(reactionItems[i].x2, reactionItems[i].y2)
+        }
+        if (minX === Infinity) {
+            zoom = 1; panX = 0; panY = 0
+            drawing.requestPaint()
+            return
+        }
+        const margin = bondLength
+        const contentWidth = maxX - minX + 2 * margin, contentHeight = maxY - minY + 2 * margin
+        zoom = Math.max(minimumZoom, Math.min(1.0, width / contentWidth, height / contentHeight))
+        panX = width / 2 - (minX + maxX) / 2 * zoom
+        panY = height / 2 - (minY + maxY) / 2 * zoom
         drawing.requestPaint()
     }
 
@@ -207,7 +230,7 @@ Rectangle {
             ctx.translate(root.panX, root.panY)
             ctx.scale(root.zoom, root.zoom)
             if (root.gridSnapEnabled) {
-                const spacing = 48
+                const spacing = root.bondLength
                 const rowHeight = spacing * Math.sqrt(3) / 2
                 const minX = -root.panX / root.zoom
                 const maxX = (width - root.panX) / root.zoom
@@ -357,6 +380,7 @@ Rectangle {
 
     MouseArea {
         id: canvasInput
+        objectName: "canvasInput"
         anchors.fill: parent
         property int dragAtom: -1
         property int dragReactionItem: -1
@@ -585,6 +609,16 @@ Rectangle {
             root.zoomAt(event.angleDelta.y > 0 ? 1.15 : 1 / 1.15, event.point.position.x, event.point.position.y)
             event.accepted = true
         }
+    }
+
+    // Two-finger pinch on desktop touchscreens and trackpads. The tablet build
+    // receives single-pointer input only, so it relies on the zoom buttons.
+    PinchHandler {
+        id: pinch
+        target: null
+        property real startZoom: 1.0
+        onActiveChanged: if (active) startZoom = root.zoom
+        onActiveScaleChanged: if (active) root.zoomTo(startZoom * activeScale, centroid.position.x, centroid.position.y)
     }
 
     Connections { target: molecule; function onChanged() { root.refresh() } }

@@ -11,14 +11,18 @@ Rectangle {
     signal undoRequested()
     signal redoRequested()
     signal clearRequested()
+    signal newRequested()
+    signal openRequested()
     signal saveRequested()
-    signal loadRequested()
+    signal exportMolRequested()
     signal exportSvgRequested()
+    signal exportSmilesRequested()
+    signal zoomInRequested()
+    signal zoomOutRequested()
+    signal fitRequested()
     signal cleanupRequested()
     signal rotateRequested()
     signal deleteSelectionRequested()
-    signal saveSchemeRequested()
-    signal loadSchemeRequested()
     signal copyRequested()
     signal pasteRequested()
     signal mirrorRequested(bool horizontal)
@@ -113,11 +117,15 @@ Rectangle {
                 selected: root.gridSnapEnabled
                 onClicked: root.gridSnapToggled(!root.gridSnapEnabled)
             }
-            RailButton { iconName: "load"; caption: "Load"; onClicked: root.loadRequested() }
+            RailButton { iconName: "zoomIn"; caption: "Zoom in"; onClicked: root.zoomInRequested() }
+            RailButton { iconName: "zoomOut"; caption: "Zoom out"; onClicked: root.zoomOutRequested() }
+            RailButton { iconName: "fit"; caption: "Fit"; onClicked: root.fitRequested() }
+            RailButton { iconName: "new"; caption: "New"; onClicked: root.newRequested() }
+            RailButton { iconName: "load"; caption: "Open"; onClicked: root.openRequested() }
             RailButton { iconName: "save"; caption: "Save"; onClicked: root.saveRequested() }
-            RailButton { iconName: "scheme"; caption: "Scheme +"; onClicked: root.saveSchemeRequested() }
-            RailButton { iconName: "scheme"; caption: "Scheme −"; onClicked: root.loadSchemeRequested() }
+            RailButton { iconName: "mol"; caption: ".mol"; onClicked: root.exportMolRequested() }
             RailButton { iconName: "svg"; caption: "SVG"; onClicked: root.exportSvgRequested() }
+            RailButton { iconName: "smiles"; caption: "SMILES"; onClicked: root.exportSmilesRequested() }
             RailButton { iconName: "clean"; caption: "Clean"; onClicked: root.cleanupRequested() }
             RailButton { iconName: "rotate"; caption: "Rotate"; onClicked: root.rotateRequested() }
             RailButton { iconName: "flipH"; caption: "Flip H"; onClicked: root.mirrorRequested(true) }

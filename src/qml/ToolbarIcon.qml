@@ -50,7 +50,12 @@ Canvas {
         case "redo": ctx.beginPath(); ctx.moveTo(8, 29); ctx.quadraticCurveTo(16, 7, 31, 14); ctx.lineTo(36, 19); ctx.stroke(); line(36, 19, 27, 19); line(36, 19, 32, 10); break
         case "load": box(7, 14, 30, 23); line(7, 14, 19, 14); line(11, 10, 22, 10); arrow(22, 5, 22, 27); break
         case "save": box(8, 6, 28, 32); box(14, 7, 15, 10); box(14, 25, 16, 12); break
-        case "scheme": hexagon(); arrow(6, 40, 38, 40); break
+        case "new": ctx.beginPath(); ctx.moveTo(10, 6); ctx.lineTo(27, 6); ctx.lineTo(34, 13); ctx.lineTo(34, 38); ctx.lineTo(10, 38); ctx.closePath(); ctx.stroke(); line(22, 17, 22, 31); line(15, 24, 29, 24); break
+        case "mol": box(6, 7, 32, 30); ctx.font = "bold 12px sans-serif"; ctx.fillText("MOL", 9, 27); break
+        case "smiles": box(6, 7, 32, 30); ctx.font = "bold 11px sans-serif"; ctx.fillText("C=O", 10, 27); break
+        case "zoomIn": ctx.beginPath(); ctx.arc(19, 19, 12, 0, Math.PI * 2); ctx.stroke(); line(28, 28, 38, 38); line(13, 19, 25, 19); line(19, 13, 19, 25); break
+        case "zoomOut": ctx.beginPath(); ctx.arc(19, 19, 12, 0, Math.PI * 2); ctx.stroke(); line(28, 28, 38, 38); line(13, 19, 25, 19); break
+        case "fit": line(6, 14, 6, 6); line(6, 6, 14, 6); line(30, 6, 38, 6); line(38, 6, 38, 14); line(38, 30, 38, 38); line(38, 38, 30, 38); line(14, 38, 6, 38); line(6, 38, 6, 30); box(15, 15, 14, 14); break
         case "svg": box(6, 7, 32, 30); ctx.font = "bold 13px sans-serif"; ctx.fillText("SVG", 9, 27); break
         case "clean": line(10, 34, 30, 14); line(24, 10, 34, 20); line(8, 37, 18, 37); break
         case "rotate": ctx.beginPath(); ctx.arc(22, 22, 14, -1.15, 4.2); ctx.stroke(); arrow(31, 8, 38, 11); break

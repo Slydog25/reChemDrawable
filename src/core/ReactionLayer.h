@@ -20,12 +20,14 @@ public:
     Q_INVOKABLE bool removeItem(int itemId);
     Q_INVOKABLE bool saveToFile(const QString &path);
     Q_INVOKABLE bool loadFromFile(const QString &path);
-    Q_INVOKABLE bool saveDefaultScheme();
-    Q_INVOKABLE bool loadDefaultScheme();
-    Q_INVOKABLE bool saveDefaultSvg();
     Q_INVOKABLE bool undo();
     Q_INVOKABLE bool redo();
     Q_INVOKABLE void clear();
+    // Removes every annotation and discards undo history (used when a document
+    // without annotations is opened). Unlike clear(), this cannot be undone.
+    void reset();
+
+    static constexpr int MaxUndoSteps = 200;
 
 signals:
     void changed();
@@ -52,7 +54,6 @@ private:
 
     Snapshot snapshot() const;
     void commit(const Snapshot &before);
-    QString defaultSchemePath() const;
 
     Molecule *m_molecule;
     QVector<Item> m_items;

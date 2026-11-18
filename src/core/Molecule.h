@@ -11,8 +11,13 @@
 
 class Molecule : public QObject {
     Q_OBJECT
+    Q_PROPERTY(double standardBondLength READ standardBondLength CONSTANT)
 
 public:
+    // Oldest undo snapshots are dropped past this many steps; each one is a full
+    // copy of the structure, and the Paper Pro has 2 GB of RAM.
+    static constexpr int MaxUndoSteps = 200;
+
     explicit Molecule(QObject *parent = nullptr);
 
     const QVector<Atom> &atomData() const;
@@ -53,14 +58,14 @@ public:
     Q_INVOKABLE bool cleanUpStructure();
     Q_INVOKABLE bool canAddBond(int atomA, int atomB, int order = 1) const;
     Q_INVOKABLE QString formula() const;
+    Q_INVOKABLE QString smiles() const;
+    double standardBondLength() const;
+    // Hydrogens implied on a non-hydrogen atom by its element, charge, and bonds.
+    int implicitHydrogens(const Atom &atom) const;
     Q_INVOKABLE QVariantMap properties() const;
-    Q_INVOKABLE QString defaultSavePath() const;
     Q_INVOKABLE bool saveToFile(const QString &path);
     Q_INVOKABLE bool loadFromFile(const QString &path);
     Q_INVOKABLE bool saveSvgToFile(const QString &path);
-    Q_INVOKABLE bool saveDefaultMolfile();
-    Q_INVOKABLE bool loadDefaultMolfile();
-    Q_INVOKABLE bool saveDefaultSvg();
     Q_INVOKABLE bool undo();
     Q_INVOKABLE bool redo();
     Q_INVOKABLE void clear();
@@ -88,7 +93,6 @@ private:
     int valenceUsed(int atomId) const;
     int maxValence(const QString &element, int charge = 0) const;
     int maxValence(const Atom &atom) const;
-    int implicitHydrogens(const Atom &atom) const;
     Snapshot snapshot() const;
     void restore(const Snapshot &snapshot);
     void commit(const Snapshot &before);

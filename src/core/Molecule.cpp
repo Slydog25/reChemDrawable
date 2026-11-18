@@ -1,8 +1,10 @@
 #include "Molecule.h"
 
+#include "Elements.h"
 #include "GeometryEngine.h"
 #include "MolfileReader.h"
 #include "MolfileWriter.h"
+#include "SmilesWriter.h"
 #include "SvgWriter.h"
 
 #include <algorithm>
@@ -13,7 +15,6 @@
 #include <QLineF>
 #include <QMap>
 #include <QSet>
-#include <QStandardPaths>
 #include <QtMath>
 
 namespace {
@@ -595,19 +596,120 @@ bool Molecule::stampFunctionalGroup(const QString &group, int atomId) {
 
 bool Molecule::cleanUpStructure() {
     if (m_bonds.isEmpty()) return false;
+    const double bondLength = GeometryEngine::StandardBondLength;
+
+    QHash<int, int> indexOf;
+    for (int index = 0; index < m_atoms.size(); ++index) indexOf.insert(m_atoms[index].id, index);
+    QHash<int, QVector<int>> neighbors;
+    QHash<int, QVector<int>> ordersAt;
+    QSet<QPair<int, int>> bonded;
+    for (const Bond &bond : m_bonds) {
+        if (!indexOf.contains(bond.atomA) || !indexOf.contains(bond.atomB)) continue;
+        neighbors[bond.atomA].append(bond.atomB);
+        neighbors[bond.atomB].append(bond.atomA);
+        ordersAt[bond.atomA].append(bond.order);
+        ordersAt[bond.atomB].append(bond.order);
+        bonded.insert(qMakePair(qMin(bond.atomA, bond.atomB), qMax(bond.atomA, bond.atomB)));
+    }
+
+    // Shortest path from `from` to `to` that avoids `avoid`, in bonds, or -1 when
+    // none exists within maxDepth. Used to tell which ring an angle sits in.
+    const auto pathAvoiding = [&neighbors](int from, int to, int avoid, int maxDepth) {
+        QHash<int, int> depth{{from, 0}};
+        QVector<int> queue{from};
+        for (int head = 0; head < queue.size(); ++head) {
+            const int current = queue[head];
+            const int currentDepth = depth.value(current);
+            if (currentDepth >= maxDepth) continue;
+            for (const int next : neighbors.value(current)) {
+                if (next == avoid || depth.contains(next)) continue;
+                if (next == to) return currentDepth + 1;
+                depth.insert(next, currentDepth + 1);
+                queue.append(next);
+            }
+        }
+        return -1;
+    };
+
+    // Each bond angle becomes a target 1-3 distance: ring angles follow the regular
+    // polygon of the smallest ring through the pair, chain angles are 120 degrees
+    // (180 next to a triple bond or an allene carbon). Crowded acyclic centers with
+    // four or more neighbors are left to the bond-length and overlap springs.
+    struct AngleTarget { int center, first, second; double distance; };
+    QVector<AngleTarget> angles;
+    for (const Atom &center : m_atoms) {
+        const QVector<int> around = neighbors.value(center.id);
+        const QVector<int> orders = ordersAt.value(center.id);
+        const bool linear = orders.contains(3) || orders.count(2) >= 2;
+        for (int i = 0; i < around.size(); ++i) {
+            for (int j = i + 1; j < around.size(); ++j) {
+                const int path = pathAvoiding(around[i], around[j], center.id, 6);
+                double degrees = 0.0;
+                if (path > 0) {
+                    const int ringSize = path + 2;
+                    degrees = 180.0 * (ringSize - 2) / ringSize;
+                } else if (around.size() == 2) {
+                    degrees = linear ? 180.0 : 120.0;
+                } else if (around.size() == 3) {
+                    degrees = 120.0;
+                } else {
+                    continue;
+                }
+                angles.append({center.id, around[i], around[j], 2.0 * bondLength * qSin(qDegreesToRadians(degrees) / 2.0)});
+            }
+        }
+    }
+
     const Snapshot before = snapshot();
-    for (int iteration = 0; iteration < 24; ++iteration) {
+    const auto pull = [this, &indexOf](int first, int second, double target, double weight, bool pushOnly) {
+        Atom &a = m_atoms[indexOf.value(first)];
+        Atom &b = m_atoms[indexOf.value(second)];
+        QPointF delta(b.x - a.x, b.y - a.y);
+        double length = qSqrt(delta.x() * delta.x() + delta.y() * delta.y());
+        if (length < 0.01) { delta = QPointF(1, 0); length = 1; }
+        if (pushOnly && length >= target) return;
+        const double scale = weight * (length - target) / (2.0 * length);
+        a.x += delta.x() * scale; a.y += delta.y() * scale;
+        b.x -= delta.x() * scale; b.y -= delta.y() * scale;
+    };
+    const double overlap = 0.75 * bondLength;
+    for (int iteration = 0; iteration < 300; ++iteration) {
         for (const Bond &bond : m_bonds) {
-            Atom *a = findAtom(bond.atomA);
-            Atom *b = findAtom(bond.atomB);
-            if (!a || !b) continue;
-            QPointF delta(b->x - a->x, b->y - a->y);
-            double length = qSqrt(delta.x() * delta.x() + delta.y() * delta.y());
-            if (length < 0.01) { delta = QPointF(1, 0); length = 1; }
-            const double scale = (length - GeometryEngine::StandardBondLength) / (2.0 * length);
-            const QPointF shift(delta.x() * scale, delta.y() * scale);
-            a->x += shift.x(); a->y += shift.y();
-            b->x -= shift.x(); b->y -= shift.y();
+            if (indexOf.contains(bond.atomA) && indexOf.contains(bond.atomB)) pull(bond.atomA, bond.atomB, bondLength, 1.0, false);
+        }
+        for (const AngleTarget &angle : angles) {
+            // A distance spring cannot bend three exactly collinear atoms, so nudge
+            // one end sideways first when the angle should not be straight.
+            const Atom &center = m_atoms[indexOf.value(angle.center)];
+            Atom &first = m_atoms[indexOf.value(angle.first)];
+            Atom &second = m_atoms[indexOf.value(angle.second)];
+            if (angle.distance >= 1.99 * bondLength) {
+                // Near 180 degrees a 1-3 distance spring has almost no leverage, so
+                // pull both ends onto the line through the center instead.
+                QPointF direction(first.x - second.x, first.y - second.y);
+                const double length = qSqrt(direction.x() * direction.x() + direction.y() * direction.y());
+                direction = length < 0.01 ? QPointF(1, 0) : direction / length;
+                first.x += 0.5 * (center.x + direction.x() * bondLength - first.x);
+                first.y += 0.5 * (center.y + direction.y() * bondLength - first.y);
+                second.x += 0.5 * (center.x - direction.x() * bondLength - second.x);
+                second.y += 0.5 * (center.y - direction.y() * bondLength - second.y);
+                continue;
+            }
+            const QPointF u(first.x - center.x, first.y - center.y), w(second.x - center.x, second.y - center.y);
+            const double cross = u.x() * w.y() - u.y() * w.x();
+            if (qAbs(cross) < 1e-3 && angle.distance < 1.99 * bondLength) {
+                const double length = qMax(0.01, qSqrt(u.x() * u.x() + u.y() * u.y()));
+                first.x += -u.y() / length * 0.1 * bondLength;
+                first.y += u.x() / length * 0.1 * bondLength;
+            }
+            pull(angle.first, angle.second, angle.distance, 0.5, false);
+        }
+        for (int i = 0; i < m_atoms.size(); ++i) {
+            for (int j = i + 1; j < m_atoms.size(); ++j) {
+                const int a = m_atoms[i].id, b = m_atoms[j].id;
+                if (bonded.contains(qMakePair(qMin(a, b), qMax(a, b)))) continue;
+                pull(a, b, overlap, 0.5, true);
+            }
         }
     }
     commit(before);
@@ -622,22 +724,25 @@ bool Molecule::canAddBond(int atomA, int atomB, int order) const {
 }
 
 QString Molecule::formula() const {
-    QMap<QString, int> counts;
+    // C and H first, then the other elements alphabetically. Isotope-labelled atoms
+    // are listed after their element as e.g. "[13C]" or "[2H]".
+    QMap<QString, QMap<int, int>> counts;
     for (const Atom &atom : m_atoms) {
-        counts[atom.element] += 1;
-        const int implicitHydrogen = implicitHydrogens(atom);
-        if (atom.element != QStringLiteral("H")) counts[QStringLiteral("H")] += implicitHydrogen;
+        counts[atom.element][atom.isotope] += 1;
+        if (atom.element != QStringLiteral("H")) counts[QStringLiteral("H")][0] += implicitHydrogens(atom);
     }
     QString result;
     const auto append = [&result, &counts](const QString &element) {
-        const int count = counts.take(element);
-        if (count) result += element + (count == 1 ? QString() : QString::number(count));
+        const QMap<int, int> isotopes = counts.take(element);
+        for (auto it = isotopes.cbegin(); it != isotopes.cend(); ++it) {
+            if (it.value() <= 0) continue;
+            result += it.key() ? QStringLiteral("[%1%2]").arg(it.key()).arg(element) : element;
+            if (it.value() > 1) result += QString::number(it.value());
+        }
     };
     append(QStringLiteral("C"));
     append(QStringLiteral("H"));
-    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
-        result += it.key() + (it.value() == 1 ? QString() : QString::number(it.value()));
-    }
+    while (!counts.isEmpty()) append(counts.firstKey());
     int totalCharge = 0;
     for (const Atom &atom : m_atoms) totalCharge += atom.formalCharge;
     if (totalCharge) result += totalCharge == 1 ? QStringLiteral("+") : totalCharge == -1 ? QStringLiteral("-") :
@@ -646,34 +751,24 @@ QString Molecule::formula() const {
 }
 
 QVariantMap Molecule::properties() const {
-    static const QHash<QString, double> averageMass = {{QStringLiteral("H"), 1.008}, {QStringLiteral("C"), 12.011},
-        {QStringLiteral("N"), 14.007}, {QStringLiteral("O"), 15.999}, {QStringLiteral("F"), 18.998}, {QStringLiteral("P"), 30.974},
-        {QStringLiteral("S"), 32.06}, {QStringLiteral("Cl"), 35.45}, {QStringLiteral("Br"), 79.904}, {QStringLiteral("I"), 126.904}};
-    static const QHash<QString, double> monoisotopicMass = {{QStringLiteral("H"), 1.007825}, {QStringLiteral("C"), 12.0},
-        {QStringLiteral("N"), 14.003074}, {QStringLiteral("O"), 15.994915}, {QStringLiteral("F"), 18.998403}, {QStringLiteral("P"), 30.973762},
-        {QStringLiteral("S"), 31.972071}, {QStringLiteral("Cl"), 34.968853}, {QStringLiteral("Br"), 78.918338}, {QStringLiteral("I"), 126.904468}};
+    const Elements::Info *hydrogen = Elements::find(QStringLiteral("H"));
     double molecularWeight = 0.0;
     double exactMass = 0.0;
+    QStringList unknown;
     for (const Atom &atom : m_atoms) {
-        molecularWeight += averageMass.value(atom.element);
-        exactMass += atom.isotope ? atom.isotope : monoisotopicMass.value(atom.element);
-        if (atom.element != QStringLiteral("H")) {
-            const int hydrogen = implicitHydrogens(atom);
-            molecularWeight += hydrogen * averageMass.value(QStringLiteral("H"));
-            exactMass += hydrogen * monoisotopicMass.value(QStringLiteral("H"));
-        }
+        const Elements::Info *info = Elements::find(atom.element);
+        if (!info && !unknown.contains(atom.element)) unknown.append(atom.element);
+        // A labelled atom contributes its mass number; that is within ~0.01 Da of
+        // the true isotopic mass for the light isotopes used in labelling.
+        molecularWeight += atom.isotope ? atom.isotope : (info ? info->averageMass : 0.0);
+        exactMass += atom.isotope ? atom.isotope : (info ? info->monoisotopicMass : 0.0);
+        const int implicit = implicitHydrogens(atom);
+        molecularWeight += implicit * hydrogen->averageMass;
+        exactMass += implicit * hydrogen->monoisotopicMass;
     }
     return {{QStringLiteral("formula"), formula()}, {QStringLiteral("molecularWeight"), molecularWeight},
             {QStringLiteral("exactMass"), exactMass}, {QStringLiteral("atomCount"), m_atoms.size()},
-            {QStringLiteral("bondCount"), m_bonds.size()}};
-}
-
-QString Molecule::defaultSavePath() const {
-    QString documents = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    if (documents.isEmpty()) {
-        documents = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    }
-    return QDir(documents).filePath(QStringLiteral("reChemDrawable/structure.mol"));
+            {QStringLiteral("bondCount"), m_bonds.size()}, {QStringLiteral("unknownElements"), unknown}};
 }
 
 bool Molecule::saveToFile(const QString &path) {
@@ -718,10 +813,6 @@ bool Molecule::saveSvgToFile(const QString &path) {
     return true;
 }
 
-bool Molecule::saveDefaultMolfile() { return saveToFile(defaultSavePath()); }
-bool Molecule::loadDefaultMolfile() { return loadFromFile(defaultSavePath()); }
-bool Molecule::saveDefaultSvg() { return saveSvgToFile(QFileInfo(defaultSavePath()).dir().filePath(QStringLiteral("structure.svg"))); }
-
 bool Molecule::undo() {
     if (m_undo.isEmpty()) return false;
     m_redo.append(snapshot());
@@ -752,40 +843,31 @@ const Bond *Molecule::findBond(int id) const { for (const Bond &bond : m_bonds) 
 
 int Molecule::valenceUsed(int atomId) const { int total = 0; for (const Bond &bond : m_bonds) if (bond.atomA == atomId || bond.atomB == atomId) total += bond.order; return total; }
 
-int Molecule::maxValence(const QString &element, int charge) const {
-    static const QHash<QString, int> values = {{QStringLiteral("C"), 4}, {QStringLiteral("N"), 3}, {QStringLiteral("O"), 2},
-        {QStringLiteral("S"), 6}, {QStringLiteral("P"), 5}, {QStringLiteral("F"), 1}, {QStringLiteral("Cl"), 1},
-        {QStringLiteral("Br"), 1}, {QStringLiteral("I"), 1}, {QStringLiteral("H"), 1}};
-    const auto found = values.constFind(element);
-    // Unknown elements stay permissive and ignore charge.
-    if (found == values.cend()) return 4;
-    // Carbon and hydrogen lose a bonding site for either sign of charge (carbocation,
-    // carbanion, proton, hydride). Group 15-17 atoms gain one per positive charge
-    // (ammonium, oxonium) and lose one per negative charge (amide, alkoxide, halide).
-    if (element == QStringLiteral("C") || element == QStringLiteral("H")) return qMax(0, *found - qAbs(charge));
-    return qMax(0, *found + charge);
-}
+int Molecule::maxValence(const QString &element, int charge) const { return Elements::maxValence(element, charge); }
 
 int Molecule::maxValence(const Atom &atom) const { return maxValence(atom.element, atom.formalCharge); }
 
 int Molecule::implicitHydrogens(const Atom &atom) const {
-    if (atom.element == QStringLiteral("H")) return 0;
-    const int used = valenceUsed(atom.id);
-    // Sulfur and phosphorus have several normal valences; fill hydrogens up to the
-    // lowest one that fits the drawn bonds (thiol SH, sulfoxide, sulfone; phosphine,
-    // phosphate) instead of the hypervalent maximum. Charge shifts each valence the
-    // same way it shifts maxValence for group 15-17 atoms.
-    static const QHash<QString, QVector<int>> normalValences = {
-        {QStringLiteral("S"), {2, 4, 6}}, {QStringLiteral("P"), {3, 5}}};
-    const auto found = normalValences.constFind(atom.element);
-    if (found == normalValences.cend()) return qMax(0, maxValence(atom) - used);
-    for (const int valence : *found) {
-        const int adjusted = valence + atom.formalCharge;
-        if (adjusted >= used) return adjusted - used;
+    // Aromatic-style bonds are stored with order 1 but count 1.5 toward hydrogen
+    // filling, so a ring drawn with aromatic bonds gives C6H6 rather than C6H12.
+    double sum = 0.0;
+    for (const Bond &bond : m_bonds) {
+        if (bond.atomA != atom.id && bond.atomB != atom.id) continue;
+        sum += bond.style == QStringLiteral("aromatic") ? 1.5 : bond.order;
     }
-    return 0;
+    return Elements::implicitHydrogens(atom.element, atom.formalCharge, qCeil(sum - 1e-9));
 }
+
+QString Molecule::smiles() const { return SmilesWriter::write(*this); }
+
+double Molecule::standardBondLength() const { return GeometryEngine::StandardBondLength; }
 
 Molecule::Snapshot Molecule::snapshot() const { return {m_atoms, m_bonds, m_nextAtomId, m_nextBondId}; }
 void Molecule::restore(const Snapshot &value) { m_atoms = value.atoms; m_bonds = value.bonds; m_nextAtomId = value.nextAtomId; m_nextBondId = value.nextBondId; }
-void Molecule::commit(const Snapshot &before) { m_undo.append(before); m_redo.clear(); emit committed(); emit changed(); }
+void Molecule::commit(const Snapshot &before) {
+    m_undo.append(before);
+    if (m_undo.size() > MaxUndoSteps) m_undo.removeFirst();
+    m_redo.clear();
+    emit committed();
+    emit changed();
+}

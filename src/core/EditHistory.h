@@ -21,6 +21,7 @@ public:
     Q_INVOKABLE void clearAll();
 
 private:
+    static constexpr int MaxSteps = 400;
     enum class Layer { Molecule, Reactions };
     using Step = QVector<Layer>;
 

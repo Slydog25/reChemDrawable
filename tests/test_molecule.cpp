@@ -1,3 +1,4 @@
+#include "core/Document.h"
 #include "core/EditHistory.h"
 #include "core/GeometryEngine.h"
 #include "core/MolfileReader.h"
@@ -411,6 +412,178 @@ private slots:
         const QString svg = SvgWriter::write(molecule);
         QVERIFY(svg.contains("<path fill=\"none\" d=\"M0,0 Q"));
         QVERIFY(svg.contains("width=\"112\" height=\"64\""));
+    }
+    void writesSmiles() {
+        Molecule ethanol;
+        const int c1 = ethanol.addAtom(0, 0);
+        const int c2 = ethanol.extendFromAtom(c1, 48, 0);
+        ethanol.extendFromAtom(c2, 96, 0, "O");
+        QCOMPARE(ethanol.smiles(), QString("CCO"));
+
+        Molecule acid;
+        QVERIFY(acid.stampFunctionalGroup("COOH", acid.addAtom(0, 0)));
+        QCOMPARE(acid.smiles(), QString("CC(=O)O"));
+
+        Molecule cyclohexane;
+        QVERIFY(cyclohexane.stampRing("cyclohexane", 0, 0));
+        QCOMPARE(cyclohexane.smiles(), QString("C1CCCCC1"));
+
+        Molecule benzene;
+        QVERIFY(benzene.stampRing("benzene", 0, 0));
+        QCOMPARE(benzene.smiles(), QString("C1=CC=CC=C1"));
+
+        Molecule aromatic;
+        QVERIFY(aromatic.stampRing("cyclohexane", 0, 0));
+        for (const Bond &bond : aromatic.bondData()) QVERIFY(aromatic.setBondStyle(bond.id, "aromatic"));
+        QCOMPARE(aromatic.smiles(), QString("c1ccccc1"));
+        QCOMPARE(aromatic.formula(), QString("C6H6"));
+
+        Molecule ions;
+        QVERIFY(ions.setAtomCharge(ions.addAtom(0, 0, "N"), 1));
+        QVERIFY(ions.setAtomIsotope(ions.addAtom(100, 0), 13));
+        QVERIFY(ions.setAtomCharge(ions.addAtom(200, 0, "Na"), 1));
+        QVERIFY(ions.setAtomCharge(ions.addAtom(300, 0, "Cl"), -1));
+        QCOMPARE(ions.smiles(), QString("[NH4+].[13CH4].[Na+].[Cl-]"));
+    }
+    void handlesMoreElementsAndIsotopesInFormulas() {
+        Molecule sodium;
+        sodium.addAtom(0, 0, "Na");
+        QCOMPARE(sodium.formula(), QString("Na"));
+        QVERIFY(qAbs(sodium.properties().value("molecularWeight").toDouble() - 22.99) < 0.01);
+
+        Molecule borohydride;
+        QVERIFY(borohydride.setAtomCharge(borohydride.addAtom(0, 0, "B"), -1));
+        QCOMPARE(borohydride.formula(), QString("H4B-"));
+
+        Molecule silane;
+        silane.addAtom(0, 0, "Si");
+        QCOMPARE(silane.formula(), QString("H4Si"));
+
+        Molecule labelled;
+        const int carbon = labelled.addAtom(0, 0);
+        labelled.extendFromAtom(carbon, 48, 0, "O");
+        QVERIFY(labelled.setAtomIsotope(carbon, 13));
+        QCOMPARE(labelled.formula(), QString("[13C]H4O"));
+
+        Molecule platinum;
+        platinum.addAtom(0, 0, "Pt");
+        QCOMPARE(platinum.formula(), QString("Pt"));
+        QCOMPARE(platinum.properties().value("unknownElements").toStringList(), QStringList{"Pt"});
+    }
+    void cleanUpFixesAnglesAndKeepsRingsRegular() {
+        const auto angleAt = [](const Molecule &molecule, int centerId, int firstId, int secondId) {
+            QPointF center, first, second;
+            for (const Atom &atom : molecule.atomData()) {
+                if (atom.id == centerId) center = QPointF(atom.x, atom.y);
+                if (atom.id == firstId) first = QPointF(atom.x, atom.y);
+                if (atom.id == secondId) second = QPointF(atom.x, atom.y);
+            }
+            return QLineF(center, first).angleTo(QLineF(center, second));
+        };
+        const auto normalized = [](double degrees) { return degrees > 180.0 ? 360.0 - degrees : degrees; };
+        const auto bondsHaveStandardLength = [](const Molecule &molecule) {
+            for (const Bond &bond : molecule.bondData()) {
+                QPointF a, b;
+                for (const Atom &atom : molecule.atomData()) {
+                    if (atom.id == bond.atomA) a = QPointF(atom.x, atom.y);
+                    if (atom.id == bond.atomB) b = QPointF(atom.x, atom.y);
+                }
+                if (qAbs(QLineF(a, b).length() - GeometryEngine::StandardBondLength) > 1.0) return false;
+            }
+            return true;
+        };
+
+        Molecule chain;
+        const int a = chain.addAtom(0, 0), b = chain.addAtom(48, 0), c = chain.addAtom(96, 0);
+        chain.addBond(a, b);
+        chain.addBond(b, c);
+        QVERIFY(chain.cleanUpStructure());
+        QVERIFY(qAbs(normalized(angleAt(chain, b, a, c)) - 120.0) < 2.0);
+        QVERIFY(bondsHaveStandardLength(chain));
+
+        Molecule ring;
+        QVERIFY(ring.stampRing("cyclopentane", 0, 0));
+        QVERIFY(ring.moveAtom(1, ring.atomData().first().x + 20, ring.atomData().first().y + 12));
+        QVERIFY(ring.cleanUpStructure());
+        QVERIFY(bondsHaveStandardLength(ring));
+        for (int center = 1; center <= 5; ++center) {
+            const int previous = center == 1 ? 5 : center - 1, next = center == 5 ? 1 : center + 1;
+            QVERIFY2(qAbs(normalized(angleAt(ring, center, previous, next)) - 108.0) < 2.0, qPrintable(QString::number(center)));
+        }
+
+        Molecule nitrile;
+        const int methyl = nitrile.addAtom(0, 0), nitrileCarbon = nitrile.addAtom(40, 30), nitrogen = nitrile.addAtom(60, 80, "N");
+        nitrile.addBond(methyl, nitrileCarbon);
+        nitrile.addBond(nitrileCarbon, nitrogen, 3);
+        QVERIFY(nitrile.cleanUpStructure());
+        QVERIFY(qAbs(normalized(angleAt(nitrile, nitrileCarbon, methyl, nitrogen)) - 180.0) < 3.0);
+    }
+    void capsUndoHistory() {
+        Molecule molecule;
+        for (int index = 0; index < Molecule::MaxUndoSteps + 50; ++index) molecule.addAtom(index, 0);
+        int steps = 0;
+        while (molecule.undo()) ++steps;
+        QCOMPARE(steps, Molecule::MaxUndoSteps);
+        QCOMPARE(molecule.atomData().size(), 50);
+    }
+    void documentsSaveOpenAndExport() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        Molecule molecule;
+        ReactionLayer layer(&molecule);
+        Document document(&molecule, &layer, directory.path());
+        QCOMPARE(document.title(), QString("Untitled"));
+        QVERIFY(!document.isDirty());
+
+        molecule.addAtom(0, 0);
+        QVERIFY(document.isDirty());
+        QVERIFY(document.save());
+        QVERIFY(!document.isDirty());
+        const QString firstPath = document.currentPath();
+        QVERIFY(firstPath.endsWith(".rcd"));
+        QVERIFY(QFileInfo(firstPath).fileName().startsWith("drawing-"));
+        layer.addArrow(0, 0, 100, 0);
+        QVERIFY(document.isDirty());
+        QVERIFY(document.save());
+        QCOMPARE(document.currentPath(), firstPath);
+        QCOMPARE(document.documents().size(), 1);
+
+        // Opening a Molfile drops the old annotations and never overwrites the .mol.
+        Molecule ethanol;
+        const int c1 = ethanol.addAtom(0, 0);
+        ethanol.extendFromAtom(ethanol.extendFromAtom(c1, 48, 0), 96, 0, "O");
+        const QString molPath = QDir(directory.path()).filePath("ethanol.mol");
+        QVERIFY(ethanol.saveToFile(molPath));
+        const QByteArray original = [&molPath] { QFile file(molPath); file.open(QIODevice::ReadOnly); return file.readAll(); }();
+        QVERIFY(document.open(molPath));
+        QCOMPARE(molecule.atomData().size(), 3);
+        QCOMPARE(layer.items().size(), 0);
+        QCOMPARE(document.title(), QString("ethanol"));
+        QVERIFY(document.isDirty());
+        QVERIFY(document.save());
+        QVERIFY(document.currentPath().endsWith("ethanol.rcd"));
+        QFile molFile(molPath);
+        QVERIFY(molFile.open(QIODevice::ReadOnly));
+        QCOMPARE(molFile.readAll(), original);
+
+        const QString smiPath = document.exportSmiles();
+        QVERIFY(smiPath.contains("/exports/"));
+        QFile smiFile(smiPath);
+        QVERIFY(smiFile.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(smiFile.readAll()), QString("CCO ethanol\n"));
+        QVERIFY(QFileInfo::exists(document.exportMolfile()));
+        QVERIFY(QFileInfo::exists(document.exportSvg()));
+
+        QVERIFY(document.open(firstPath));
+        QCOMPARE(layer.items().size(), 1);
+        QVERIFY(!document.isDirty());
+        QCOMPARE(document.documents().size(), 3);
+
+        document.newDocument();
+        QCOMPARE(molecule.atomData().size(), 0);
+        QCOMPARE(layer.items().size(), 0);
+        QVERIFY(!document.isDirty());
+        QCOMPARE(document.title(), QString("Untitled"));
     }
     void preservesWavyBondsInMolfiles() {
         Molecule source;

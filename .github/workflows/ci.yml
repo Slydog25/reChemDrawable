@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  desktop:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the Qt image
+        run: docker build -q -t rechemdraw-qt -f packaging/docker/Dockerfile.desktop .
+
+      - name: Build and run core and QML tests
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace rechemdraw-qt ./build-pc.sh
+
+      - name: Startup smoke test
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace rechemdraw-qt sh -lc \
+            'QT_QPA_PLATFORM=offscreen timeout 3 ./build-pc/reChemDrawable; test $? -eq 124'

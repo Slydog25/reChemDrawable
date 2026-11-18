@@ -133,6 +133,11 @@ void QtfbClient::present(const QImage &image) {
         return;
 
     const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
+    // The window is grabbed on a timer; only push frames that actually changed,
+    // so an idle editor does not keep refreshing the e-ink panel.
+    if (rgb == lastFrame_)
+        return;
+    lastFrame_ = rgb;
     std::memset(sharedMemory_, 0xff, sharedMemorySize_);
     const int copyWidth = std::min(width_, rgb.width());
     const int copyHeight = std::min(height_, rgb.height());
@@ -189,4 +194,5 @@ void QtfbClient::close() {
         socketFd_ = -1;
     }
     sharedMemorySize_ = 0;
+    lastFrame_ = QImage();
 }

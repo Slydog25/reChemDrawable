@@ -3,7 +3,6 @@
 #include "Molecule.h"
 #include "MolfileReader.h"
 #include "MolfileWriter.h"
-#include "SvgWriter.h"
 
 #include <QDir>
 #include <QFile>
@@ -12,7 +11,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLineF>
-#include <QStandardPaths>
 
 namespace {
 double segmentDistance(const QPointF &point, const QPointF &start, const QPointF &end) {
@@ -149,19 +147,6 @@ bool ReactionLayer::loadFromFile(const QString &path) {
     return true;
 }
 
-bool ReactionLayer::saveDefaultScheme() { return saveToFile(defaultSchemePath()); }
-bool ReactionLayer::loadDefaultScheme() { return loadFromFile(defaultSchemePath()); }
-bool ReactionLayer::saveDefaultSvg() {
-    if (!m_molecule) return false;
-    const QString path = QFileInfo(defaultSchemePath()).dir().filePath(QStringLiteral("reaction-scheme.svg"));
-    if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
-    file.write(SvgWriter::write(*m_molecule, items()).toUtf8());
-    emit message(QStringLiteral("Saved reaction-scheme SVG %1.").arg(path));
-    return true;
-}
-
 bool ReactionLayer::undo() {
     if (m_undo.isEmpty()) return false;
     m_redo.append(snapshot());
@@ -185,10 +170,19 @@ void ReactionLayer::clear() {
 }
 
 ReactionLayer::Snapshot ReactionLayer::snapshot() const { return {m_items, m_nextId}; }
-void ReactionLayer::commit(const Snapshot &before) { m_undo.append(before); m_redo.clear(); emit committed(); emit changed(); }
+void ReactionLayer::commit(const Snapshot &before) {
+    m_undo.append(before);
+    if (m_undo.size() > MaxUndoSteps) m_undo.removeFirst();
+    m_redo.clear();
+    emit committed();
+    emit changed();
+}
 
-QString ReactionLayer::defaultSchemePath() const {
-    QString documents = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    if (documents.isEmpty()) documents = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    return QDir(documents).filePath(QStringLiteral("reChemDrawable/reaction-scheme.rcd"));
+void ReactionLayer::reset() {
+    m_items.clear();
+    m_nextId = 1;
+    m_undo.clear();
+    m_redo.clear();
+    emit historyReset();
+    emit changed();
 }

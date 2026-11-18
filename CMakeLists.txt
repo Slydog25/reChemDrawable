@@ -15,18 +15,22 @@ qt_standard_project_setup()
 option(RECHEMDRAW_EXTERNAL_QML "Load QML files from beside the application binary" OFF)
 
 set(CORE_SOURCES
+    src/core/Document.cpp
     src/core/EditHistory.cpp
+    src/core/Elements.cpp
     src/core/GeometryEngine.cpp
     src/core/Molecule.cpp
     src/core/MolfileReader.cpp
     src/core/MolfileWriter.cpp
     src/core/ReactionLayer.cpp
+    src/core/SmilesWriter.cpp
     src/core/SvgWriter.cpp
 )
 
 set(PLATFORM_SOURCES
     src/platform/InputSettings.cpp
     src/platform/InputSettings.h
+    src/platform/QmlJitWorkaround.h
     src/platform/QtfbClient.cpp
     src/platform/QtfbClient.h
 )
@@ -34,12 +38,15 @@ set(PLATFORM_SOURCES
 set(CORE_HEADERS
     src/core/Atom.h
     src/core/Bond.h
+    src/core/Document.h
     src/core/EditHistory.h
+    src/core/Elements.h
     src/core/GeometryEngine.h
     src/core/Molecule.h
     src/core/MolfileReader.h
     src/core/MolfileWriter.h
     src/core/ReactionLayer.h
+    src/core/SmilesWriter.h
     src/core/SvgWriter.h
 )
 
@@ -71,4 +78,18 @@ if(BUILD_TESTING)
     target_link_libraries(core_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME core_tests COMMAND core_tests)
     set_tests_properties(core_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    # QML interaction tests: drive MoleculeCanvas with simulated taps and drags.
+    find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)
+    qt_add_executable(qml_tests
+        tests/qml_tests.cpp
+        src/platform/InputSettings.cpp
+        src/platform/InputSettings.h
+        ${CORE_SOURCES}
+        ${CORE_HEADERS}
+    )
+    target_include_directories(qml_tests PRIVATE src)
+    target_link_libraries(qml_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickTest)
+    add_test(NAME qml_tests COMMAND qml_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml)
+    set_tests_properties(qml_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
