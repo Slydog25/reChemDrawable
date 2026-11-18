@@ -46,7 +46,11 @@ ApplicationWindow {
                 onUndoRequested: editHistory.undo()
                 onRedoRequested: editHistory.redo()
                 onClearRequested: { editHistory.clearAll(); window.selectedAtom = -1 }
-                onSaveRequested: molecule.saveDefaultMolfile()
+                onSaveRequested: {
+                    // A .mol file holds only the structure; say so instead of dropping annotations silently.
+                    if (molecule.saveDefaultMolfile() && reactionLayer.items().length > 0)
+                        statusLine.text = "Saved the structure only. Use Scheme + to keep arrows and labels."
+                }
                 onLoadRequested: { molecule.loadDefaultMolfile(); window.selectedAtom = -1 }
                 onExportSvgRequested: reactionLayer.saveDefaultSvg()
                 onCleanupRequested: molecule.cleanUpStructure()

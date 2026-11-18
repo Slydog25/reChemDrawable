@@ -99,6 +99,21 @@ int Molecule::addBond(int atomA, int atomB, int order) {
     return id;
 }
 
+int Molecule::extendFromAtom(int atomId, double x, double y, const QString &element) {
+    const Atom *anchor = findAtom(atomId);
+    if (!anchor) return -1;
+    if (valenceUsed(atomId) + 1 > maxValence(*anchor)) {
+        emit message(QStringLiteral("That atom has no free valence for another bond."));
+        return -1;
+    }
+    const Snapshot before = snapshot();
+    const int id = m_nextAtomId++;
+    m_atoms.append({id, element.trimmed().isEmpty() ? QStringLiteral("C") : element.trimmed(), x, y});
+    m_bonds.append({m_nextBondId++, atomId, id, 1, 0});
+    commit(before);
+    return id;
+}
+
 bool Molecule::cycleBondOrder(int bondId) {
     Bond *bond = findBond(bondId);
     if (!bond) return false;
@@ -182,6 +197,8 @@ bool Molecule::moveAtom(int atomId, double x, double y) {
 }
 
 bool Molecule::translateAtoms(const QVariantList &atomIds, double dx, double dy) {
+    // A tap with the Move tool translates by zero; don't record an empty undo step.
+    if (qFuzzyIsNull(dx) && qFuzzyIsNull(dy)) return false;
     bool found = false;
     const Snapshot before = snapshot();
     for (const QVariant &value : atomIds) {
@@ -319,7 +336,9 @@ bool Molecule::setBondStyle(int bondId, const QString &style) {
     if (!bond || !isBondStyle(style)) return false;
     const Snapshot before = snapshot();
     bond->style = style;
-    bond->stereo = style == QStringLiteral("wedge") ? 1 : style == QStringLiteral("dash") ? 2 : 0;
+    // Keep the stored stereo flag in V2000 terms, matching MolfileReader/Writer.
+    bond->stereo = style == QStringLiteral("wedge") ? 1 : style == QStringLiteral("dash") ? 6 :
+                   style == QStringLiteral("wavy") ? (bond->order == 2 ? 3 : 4) : 0;
     commit(before);
     return true;
 }
@@ -511,7 +530,11 @@ bool Molecule::stampRingAtBond(const QString &templateName, int bondId, double x
 
 bool Molecule::stampFunctionalGroup(const QString &group, int atomId) {
     Atom *anchor = findAtom(atomId);
-    if (!anchor || valenceUsed(atomId) + 1 > maxValence(*anchor)) return false;
+    if (!anchor) return false;
+    if (valenceUsed(atomId) + 1 > maxValence(*anchor)) {
+        emit message(QStringLiteral("That atom has no free valence for a substituent."));
+        return false;
+    }
     const Snapshot before = snapshot();
     const QPointF firstPoint(anchor->x + GeometryEngine::StandardBondLength, anchor->y);
     const auto appendAtom = [this](const QString &element, const QPointF &point) {
@@ -545,6 +568,10 @@ bool Molecule::stampFunctionalGroup(const QString &group, int atomId) {
         appendBond(atomId, nitrogen, 1);
         appendBond(nitrogen, oxygen1, 2);
         appendBond(nitrogen, oxygen2, 1);
+        // Nitro is N+(=O)O-; without the charges nitrogen would carry four bonds
+        // past its neutral valence limit.
+        findAtom(nitrogen)->formalCharge = 1;
+        findAtom(oxygen2)->formalCharge = -1;
     } else if (group == QStringLiteral("tBu")) {
         const int center = appendAtom(QStringLiteral("C"), firstPoint);
         appendBond(atomId, center, 1);

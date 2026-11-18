@@ -37,8 +37,17 @@ Rectangle {
         atomItems = molecule.atoms()
         bondItems = molecule.bonds()
         reactionItems = reactionLayer.items()
+        // Drop selected ids that no longer exist (after erase, undo, clear, or load).
+        const present = {}
+        for (let i = 0; i < atomItems.length; ++i) present[atomItems[i].id] = true
+        const kept = selectedAtoms.filter(function(id) { return present[id] === true })
+        if (kept.length !== selectedAtoms.length) selectedAtoms = kept
+        if (selectedAtom >= 0 && !present[selectedAtom]) selectedAtomChangedByCanvas(-1)
         drawing.requestPaint()
     }
+
+    // A half-placed arrow should not survive switching to another tool.
+    onActiveToolChanged: canvasInput.awaitingArrowEnd = false
 
     function atomById(id) {
         for (let i = 0; i < atomItems.length; ++i)
@@ -347,6 +356,7 @@ Rectangle {
     }
 
     MouseArea {
+        id: canvasInput
         anchors.fill: parent
         property int dragAtom: -1
         property int dragReactionItem: -1
@@ -439,8 +449,7 @@ Rectangle {
                     molecule.addBond(drawStartAtom, target)
                 } else {
                     const end = root.placementPoint(point.x, point.y)
-                    const newAtom = molecule.addAtom(end.x, end.y)
-                    if (molecule.addBond(drawStartAtom, newAtom) < 0) molecule.removeAtom(newAtom)
+                    molecule.extendFromAtom(drawStartAtom, end.x, end.y)
                 }
                 root.selectedAtomChangedByCanvas(-1)
                 skipNextClick = true
@@ -493,9 +502,8 @@ Rectangle {
                 if (hitAtom >= 0) {
                     let end = root.suggestedBondEnd(hitAtom)
                     if (root.gridSnapEnabled) end = root.snapToHexGrid(end.x, end.y)
-                    const newAtom = molecule.addAtom(end.x, end.y)
-                    if (molecule.addBond(hitAtom, newAtom) < 0) molecule.removeAtom(newAtom)
-                    else status("Carbon extended from the tapped atom.")
+                    if (molecule.extendFromAtom(hitAtom, end.x, end.y) >= 0)
+                        status("Carbon extended from the tapped atom.")
                 } else {
                     const placed = root.placementPoint(point.x, point.y)
                     molecule.addAtom(placed.x, placed.y)
@@ -566,20 +574,9 @@ Rectangle {
                 }
                 return
             }
-            if (selectedAtom < 0) {
-                if (hitAtom >= 0) selectedAtomChangedByCanvas(hitAtom)
-                else selectedAtomChangedByCanvas(molecule.addAtom(point.x, point.y))
-                return
-            }
-            if (hitAtom >= 0) {
-                if (hitAtom !== selectedAtom) molecule.addBond(selectedAtom, hitAtom)
-                selectedAtomChangedByCanvas(-1)
-                return
-            }
-            const end = molecule.snappedBondEnd(selectedAtom, point.x, point.y)
-            const newAtom = molecule.addAtom(end.x, end.y)
-            if (molecule.addBond(selectedAtom, newAtom) < 0) molecule.removeAtom(newAtom)
-            selectedAtomChangedByCanvas(-1)
+            // Pan (and any tool not handled above) does nothing on release. MouseArea
+            // reports a click even after a drag, so falling through here used to drop
+            // a stray carbon at the end of every pan gesture.
         }
     }
 

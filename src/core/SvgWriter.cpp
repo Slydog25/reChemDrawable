@@ -36,8 +36,10 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
     constexpr double padding = 32.0;
     QString output;
     QTextStream stream(&output);
-    stream << "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"" << minX - padding << " " << minY - padding << " "
-           << maxX - minX + 2 * padding << " " << maxY - minY + 2 * padding << "\" stroke=\"#111\" fill=\"#111\">\n";
+    const double svgWidth = maxX - minX + 2 * padding, svgHeight = maxY - minY + 2 * padding;
+    stream << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << svgWidth << "\" height=\"" << svgHeight
+           << "\" viewBox=\"" << minX - padding << " " << minY - padding << " " << svgWidth << " " << svgHeight
+           << "\" stroke=\"#111\" fill=\"#111\">\n";
     stream << "<g stroke-width=\"3\" stroke-linecap=\"round\">\n";
     for (const Bond &bond : molecule.bondData()) {
         const Atom a = byId.value(bond.atomA), b = byId.value(bond.atomB);
@@ -56,6 +58,17 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
                 stream << "<line x1=\"" << x + nx * width << "\" y1=\"" << y + ny * width << "\" x2=\""
                        << x - nx * width << "\" y2=\"" << y - ny * width << "\"/>\n";
             }
+            continue;
+        }
+        if (bond.style == QStringLiteral("wavy")) {
+            // Same wave as MoleculeCanvas.qml draws on screen.
+            stream << "<path fill=\"none\" d=\"M" << a.x << ',' << a.y;
+            for (int wave = 1; wave <= 6; ++wave) {
+                const double progress = wave / 6.0, sign = wave % 2 == 0 ? -1.0 : 1.0;
+                const double px = a.x + dx * progress, py = a.y + dy * progress;
+                stream << " Q" << px + nx * sign * 7 << ',' << py + ny * sign * 7 << ' ' << px << ',' << py;
+            }
+            stream << "\"/>\n";
             continue;
         }
         if (bond.style == QStringLiteral("benzene")) {

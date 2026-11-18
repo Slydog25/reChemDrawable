@@ -23,6 +23,9 @@ public:
     Q_INVOKABLE QVariantList bonds() const;
     Q_INVOKABLE int addAtom(double x, double y, const QString &element = QStringLiteral("C"));
     Q_INVOKABLE int addBond(int atomA, int atomB, int order = 1);
+    // Adds a new atom single-bonded to atomId as one undoable step. Returns the
+    // new atom's id, or -1 (with no change) when atomId has no free valence.
+    Q_INVOKABLE int extendFromAtom(int atomId, double x, double y, const QString &element = QStringLiteral("C"));
     Q_INVOKABLE bool cycleBondOrder(int bondId);
     Q_INVOKABLE bool removeAtom(int atomId);
     Q_INVOKABLE bool removeBond(int bondId);

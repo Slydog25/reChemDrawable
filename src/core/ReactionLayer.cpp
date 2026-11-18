@@ -70,6 +70,7 @@ int ReactionLayer::itemAt(double x, double y, double tolerance) const {
 }
 
 bool ReactionLayer::translateItem(int itemId, double dx, double dy) {
+    if (qFuzzyIsNull(dx) && qFuzzyIsNull(dy)) return false;
     for (Item &item : m_items) {
         if (item.id != itemId) continue;
         const Snapshot before = snapshot();

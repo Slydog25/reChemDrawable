@@ -333,6 +333,85 @@ private slots:
             phosphoricAcid.addBond(phosphorus, phosphoricAcid.addAtom(48 * index - 48, 48, "O"));
         QCOMPARE(phosphoricAcid.formula(), QString("H3O4P"));
     }
+    void extendsFromAnAtomAsOneUndoStep() {
+        Molecule molecule;
+        const int carbon = molecule.addAtom(0, 0);
+        const int added = molecule.extendFromAtom(carbon, 48, 0);
+        QVERIFY(added >= 0);
+        QCOMPARE(molecule.bondData().size(), 1);
+        QVERIFY(molecule.undo());
+        QCOMPARE(molecule.atomData().size(), 1);
+        QCOMPARE(molecule.bondData().size(), 0);
+
+        Molecule full;
+        const int fluorine = full.addAtom(0, 0, "F");
+        QVERIFY(full.extendFromAtom(fluorine, 48, 0) >= 0);
+        QCOMPARE(full.extendFromAtom(fluorine, -48, 0), -1);
+        QCOMPARE(full.atomData().size(), 2);
+        // The refused extension must leave nothing behind for Undo to resurrect.
+        QVERIFY(full.undo());
+        QCOMPARE(full.atomData().size(), 1);
+        QVERIFY(full.undo());
+        QCOMPARE(full.atomData().size(), 0);
+        QVERIFY(!full.undo());
+    }
+    void stampsNitroWithFormalCharges() {
+        Molecule molecule;
+        const int anchor = molecule.addAtom(0, 0);
+        QVERIFY(molecule.stampFunctionalGroup("NO2", anchor));
+        QCOMPARE(molecule.formula(), QString("CH3NO2"));
+        int positive = 0, negative = 0;
+        for (const Atom &atom : molecule.atomData()) {
+            if (atom.element == QStringLiteral("N")) QCOMPARE(atom.formalCharge, 1);
+            positive += atom.formalCharge > 0;
+            negative += atom.formalCharge < 0;
+        }
+        QCOMPARE(positive, 1);
+        QCOMPARE(negative, 1);
+        int nitrogen = -1;
+        for (const Atom &atom : molecule.atomData()) if (atom.element == QStringLiteral("N")) nitrogen = atom.id;
+        QCOMPARE(molecule.extendFromAtom(nitrogen, 0, 100), -1);
+    }
+    void zeroMovesDoNotCreateUndoSteps() {
+        Molecule molecule;
+        const int atom = molecule.addAtom(0, 0);
+        QVERIFY(!molecule.translateAtoms({atom}, 0, 0));
+        QVERIFY(molecule.undo());
+        QCOMPARE(molecule.atomData().size(), 0);
+
+        Molecule host;
+        ReactionLayer layer(&host);
+        const int arrow = layer.addArrow(0, 0, 100, 0);
+        QVERIFY(!layer.translateItem(arrow, 0, 0));
+        QVERIFY(layer.undo());
+        QCOMPARE(layer.items().size(), 0);
+    }
+    void readsWindowsLineEndingsAndRejectsV3000() {
+        Molecule source;
+        const int nitrogen = source.addAtom(0, 0, "N");
+        QVERIFY(source.setAtomCharge(nitrogen, 1));
+        QString crlf = MolfileWriter::writeV2000(source);
+        crlf.replace("\n", "\r\n");
+        Molecule loaded;
+        QString error;
+        QVERIFY(MolfileReader::readV2000(crlf, &loaded, &error));
+        QCOMPARE(loaded.atomData().first().formalCharge, 1);
+
+        const QString v3000 = "\n  Other\n\n  0  0  0     0  0            999 V3000\nM  V30 BEGIN CTAB\nM  END\n";
+        Molecule rejected;
+        QVERIFY(!MolfileReader::readV2000(v3000, &rejected, &error));
+        QVERIFY(error.contains("V3000"));
+    }
+    void exportsWavyBondsAndSizeToSvg() {
+        Molecule molecule;
+        const int a = molecule.addAtom(0, 0);
+        const int b = molecule.addAtom(48, 0);
+        QVERIFY(molecule.setBondStyle(molecule.addBond(a, b), "wavy"));
+        QCOMPARE(molecule.bondData().first().stereo, 4);
+        const QString svg = SvgWriter::write(molecule);
+        QVERIFY(svg.contains("<path fill=\"none\" d=\"M0,0 Q"));
+        QVERIFY(svg.contains("width=\"112\" height=\"64\""));
+    }
     void preservesWavyBondsInMolfiles() {
         Molecule source;
         const int a = source.addAtom(0, 0);

@@ -7,8 +7,16 @@
 
 bool MolfileReader::readV2000(const QString &contents, Molecule *molecule, QString *error) {
     if (!molecule) return false;
-    const QStringList lines = contents.split('\n');
+    // Accept Windows line endings, which otherwise leave '\r' on the last field of
+    // each line and make "M  CHG"/"M  ISO" values fail to parse.
+    QString normalized = contents;
+    normalized.remove('\r');
+    const QStringList lines = normalized.split('\n');
     if (lines.size() < 4) { if (error) *error = QStringLiteral("File is too short for a V2000 Molfile."); return false; }
+    if (lines[3].contains(QStringLiteral("V3000"))) {
+        if (error) *error = QStringLiteral("V3000 Molfiles are not supported; save the structure as V2000.");
+        return false;
+    }
     bool atomsOk = false, bondsOk = false;
     const int atomCount = lines[3].mid(0, 3).trimmed().toInt(&atomsOk);
     const int bondCount = lines[3].mid(3, 3).trimmed().toInt(&bondsOk);
