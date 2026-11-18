@@ -19,10 +19,10 @@ docker run --rm -v "$PWD:/workspace" -w /workspace rechemdraw-qt sh -lc \
 ## Architecture boundaries
 
 - `src/core/` owns graph state, geometry, undo/redo, and Molfile I/O. Keep it UI-independent and add or update a QtTest case in `tests/` for behavior changes.
-- `src/qml/` renders core state and turns interactions into calls on `Molecule`; it must not maintain a second molecule model.
+- `src/qml/` renders core state and turns interactions into calls on `Molecule`; it must not maintain a second molecule model. UI undo/redo goes through `EditHistory`, which keeps one timeline across `Molecule` and `ReactionLayer`.
 - Carbon is stored explicitly but drawn without a label. Canvas coordinates use `GeometryEngine::StandardBondLength`; Molfile coordinates are converted at the serialization boundary.
 - The Paper Pro build must use the official SDK that matches the device firmware. Do not substitute a generic aarch64 build for device validation.
 
 ## Current intentional limits
 
-The v1 editor is tap-first: no handwriting recognition, freehand ink, live drag preview, charges, or stereochemistry. Do not introduce a third-party chemistry library without an explicit decision to do so.
+The v1 editor is tap-first: no handwriting recognition, freehand ink, live drag preview, or stereochemistry perception. Formal charges, isotopes, and wedge/dash/wavy bonds are drawn and round-tripped through Molfiles, but stereocenters are not interpreted. Do not introduce a third-party chemistry library without an explicit decision to do so.

@@ -19,8 +19,8 @@ ApplicationWindow {
     property var moleculeProperties: ({})
     property string reactionLabel: "conditions"
 
-    Shortcut { sequences: [StandardKey.Undo]; onActivated: molecule.undo() }
-    Shortcut { sequences: [StandardKey.Redo]; onActivated: molecule.redo() }
+    Shortcut { sequences: [StandardKey.Undo]; onActivated: editHistory.undo() }
+    Shortcut { sequences: [StandardKey.Redo]; onActivated: editHistory.redo() }
     Shortcut { sequences: [StandardKey.Copy]; onActivated: editor.copySelection() }
     Shortcut { sequences: [StandardKey.Paste]; onActivated: editor.pasteSelection() }
 
@@ -43,9 +43,9 @@ ApplicationWindow {
                 onToolSelected: window.activeTool = tool
                 onTouchDrawingToggled: function(enabled) { inputSettings.touchDrawingEnabled = enabled }
                 onGridSnapToggled: function(enabled) { window.gridSnapEnabled = enabled }
-                onUndoRequested: molecule.undo()
-                onRedoRequested: molecule.redo()
-                onClearRequested: { molecule.clear(); reactionLayer.clear(); window.selectedAtom = -1 }
+                onUndoRequested: editHistory.undo()
+                onRedoRequested: editHistory.redo()
+                onClearRequested: { editHistory.clearAll(); window.selectedAtom = -1 }
                 onSaveRequested: molecule.saveDefaultMolfile()
                 onLoadRequested: { molecule.loadDefaultMolfile(); window.selectedAtom = -1 }
                 onExportSvgRequested: reactionLayer.saveDefaultSvg()

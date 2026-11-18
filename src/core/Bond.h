@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QString>
+
 struct Bond {
     int id = -1;
     int atomA = -1;

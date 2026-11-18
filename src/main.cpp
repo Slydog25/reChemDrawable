@@ -1,3 +1,4 @@
+#include "core/EditHistory.h"
 #include "core/Molecule.h"
 #include "core/ReactionLayer.h"
 #include "platform/InputSettings.h"
@@ -23,9 +24,11 @@ int main(int argc, char *argv[]) {
     QQmlApplicationEngine engine;
     Molecule molecule;
     ReactionLayer reactionLayer(&molecule);
+    EditHistory editHistory(&molecule, &reactionLayer);
     InputSettings inputSettings;
     engine.rootContext()->setContextProperty(QStringLiteral("molecule"), &molecule);
     engine.rootContext()->setContextProperty(QStringLiteral("reactionLayer"), &reactionLayer);
+    engine.rootContext()->setContextProperty(QStringLiteral("editHistory"), &editHistory);
     engine.rootContext()->setContextProperty(QStringLiteral("inputSettings"), &inputSettings);
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
 #ifdef RECHEMDRAW_EXTERNAL_QML

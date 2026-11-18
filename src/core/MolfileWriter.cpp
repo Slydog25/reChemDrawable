@@ -25,7 +25,12 @@ QString MolfileWriter::writeV2000(const Molecule &molecule, const QString &title
     }
     for (const Bond &bond : bonds) {
         const int molfileOrder = bond.style == QStringLiteral("aromatic") ? 4 : bond.order;
-        const int stereo = bond.style == QStringLiteral("wedge") ? 1 : bond.style == QStringLiteral("dash") ? 6 : 0;
+        // V2000 bond stereo: 1 = up (wedge), 6 = down (dash), 4 = either (wavy single),
+        // 3 = cis/trans either (wavy double).
+        int stereo = 0;
+        if (bond.style == QStringLiteral("wedge")) stereo = 1;
+        else if (bond.style == QStringLiteral("dash")) stereo = 6;
+        else if (bond.style == QStringLiteral("wavy")) stereo = bond.order == 2 ? 3 : bond.order == 1 ? 4 : 0;
         stream << QString::number(indices.value(bond.atomA)).rightJustified(3)
                << QString::number(indices.value(bond.atomB)).rightJustified(3)
                << QString::number(molfileOrder).rightJustified(3)

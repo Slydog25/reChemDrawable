@@ -65,6 +65,10 @@ public:
 signals:
     void changed();
     void message(const QString &text);
+    // Emitted once for every new undoable edit (not for undo/redo themselves).
+    void committed();
+    // Emitted when the undo/redo stacks are discarded, e.g. after loading a file.
+    void historyReset();
 
 private:
     struct Snapshot {
@@ -79,7 +83,8 @@ private:
     Bond *findBond(int id);
     const Bond *findBond(int id) const;
     int valenceUsed(int atomId) const;
-    int maxValence(const QString &element) const;
+    int maxValence(const QString &element, int charge = 0) const;
+    int maxValence(const Atom &atom) const;
     Snapshot snapshot() const;
     void restore(const Snapshot &snapshot);
     void commit(const Snapshot &before);

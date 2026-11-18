@@ -15,6 +15,7 @@ qt_standard_project_setup()
 option(RECHEMDRAW_EXTERNAL_QML "Load QML files from beside the application binary" OFF)
 
 set(CORE_SOURCES
+    src/core/EditHistory.cpp
     src/core/GeometryEngine.cpp
     src/core/Molecule.cpp
     src/core/MolfileReader.cpp
@@ -33,6 +34,7 @@ set(PLATFORM_SOURCES
 set(CORE_HEADERS
     src/core/Atom.h
     src/core/Bond.h
+    src/core/EditHistory.h
     src/core/GeometryEngine.h
     src/core/Molecule.h
     src/core/MolfileReader.h

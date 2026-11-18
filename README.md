@@ -9,9 +9,10 @@ The current milestone is a desktop Qt Quick prototype with a testable C++ molecu
 - Stable atom and bond IDs, graph editing, hit testing, atom movement, and undo/redo.
 - Element labels, formal charges, isotopes, single/double/triple/aromatic bonds, and wedge/dash/wavy bond styles.
 - Formula, molecular weight, and exact-mass summaries for the drawn structure.
-- MDL Molfile V2000 read/write with charge, isotope, aromatic, and wedge/dash preservation, plus SVG export.
+- MDL Molfile V2000 read/write with charge, isotope, aromatic, and wedge/dash/wavy preservation, plus SVG export.
 - A monochrome QML editor with tap-to-place/tap-to-connect editing, drag-to-move, pan, wheel zoom, and common fragment stamps (OH, NH2, Me, COOH, CN, NO2, tBu, and Ph).
 - Box selection, multi-atom move/rotate/mirror/align/delete, and copy/paste of complete selected fragments; desktop builds also accept the standard undo/redo and copy/paste keyboard shortcuts.
+- One undo/redo timeline covering both structure edits and reaction arrows/labels; **Clear** undoes in a single step.
 - Reaction-scheme arrows and condition/reagent text labels, saved together with the molecule in a portable `.rcd` JSON document and included in SVG scheme export.
 
 ## Desktop build
@@ -22,7 +23,7 @@ Install Qt 6 with the Core, Gui, Qml, Quick, and Test components, then run:
 ./build-pc.sh
 ```
 
-The executable is placed in `build-pc/`. The project was not built in this checkout because Qt/CMake are not installed here yet.
+The executable is placed in `build-pc/`. To build and test without installing Qt on the host, use the Docker image described in [AGENTS.md](AGENTS.md).
 
 ## Paper Pro build
 
@@ -34,7 +35,7 @@ Before deploying, copy the manifest format from the installed AppLoad release in
 
 Canvas coordinates use a 48-pixel standard bond length. Molfile export converts these into 1.0-unit 2D coordinates and flips the Y axis, so structures retain their proportions in desktop chemistry tools. Atoms are always explicit in the graph and in Molfiles; carbon labels are merely hidden in the renderer.
 
-Valence checking is intentionally lightweight. It prevents common accidental over-bonding but does not attempt aromaticity perception, charge balancing, canonical SMILES, or 3D chemistry.
+Valence checking is intentionally lightweight. It prevents common accidental over-bonding and accounts for formal charge (N⁺ and O⁺ may carry one more bond, C⁺/C⁻ and anions one fewer), but does not attempt aromaticity perception, charge balancing, canonical SMILES, or 3D chemistry.
 
 ## Saving and reopening
 

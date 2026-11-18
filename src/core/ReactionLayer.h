@@ -30,6 +30,10 @@ public:
 signals:
     void changed();
     void message(const QString &text);
+    // Emitted once for every new undoable edit (not for undo/redo themselves).
+    void committed();
+    // Emitted when the undo/redo stacks are discarded, e.g. after loading a scheme.
+    void historyReset();
 
 private:
     struct Item {

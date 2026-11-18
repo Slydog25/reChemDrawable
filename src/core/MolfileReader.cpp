@@ -33,7 +33,11 @@ bool MolfileReader::readV2000(const QString &contents, Molecule *molecule, QStri
         bool stereoOk = false;
         const int stereo = line.mid(9, 3).trimmed().toInt(&stereoOk);
         if (!aOk || !bOk || !orderOk || a < 1 || a > atomCount || b < 1 || b > atomCount || rawOrder < 1 || rawOrder > 4) { if (error) *error = QStringLiteral("Invalid bond record."); return false; }
-        const QString style = rawOrder == 4 ? QStringLiteral("aromatic") : stereo == 1 ? QStringLiteral("wedge") : stereo == 6 ? QStringLiteral("dash") : QStringLiteral("plain");
+        QString style = QStringLiteral("plain");
+        if (rawOrder == 4) style = QStringLiteral("aromatic");
+        else if (stereo == 1) style = QStringLiteral("wedge");
+        else if (stereo == 6) style = QStringLiteral("dash");
+        else if ((rawOrder == 1 && stereo == 4) || (rawOrder == 2 && stereo == 3)) style = QStringLiteral("wavy");
         bonds.append({index + 1, a, b, rawOrder == 4 ? 1 : rawOrder, stereoOk ? stereo : 0, style});
     }
     for (int lineIndex = 4 + atomCount + bondCount; lineIndex < lines.size(); ++lineIndex) {

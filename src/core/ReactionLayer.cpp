@@ -142,6 +142,7 @@ bool ReactionLayer::loadFromFile(const QString &path) {
     m_items = annotations;
     m_nextId = nextId;
     m_undo.clear(); m_redo.clear();
+    emit historyReset();
     emit changed();
     emit message(QStringLiteral("Loaded reaction scheme %1.").arg(path));
     return true;
@@ -183,7 +184,7 @@ void ReactionLayer::clear() {
 }
 
 ReactionLayer::Snapshot ReactionLayer::snapshot() const { return {m_items, m_nextId}; }
-void ReactionLayer::commit(const Snapshot &before) { m_undo.append(before); m_redo.clear(); emit changed(); }
+void ReactionLayer::commit(const Snapshot &before) { m_undo.append(before); m_redo.clear(); emit committed(); emit changed(); }
 
 QString ReactionLayer::defaultSchemePath() const {
     QString documents = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);

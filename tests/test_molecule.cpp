@@ -1,3 +1,4 @@
+#include "core/EditHistory.h"
 #include "core/GeometryEngine.h"
 #include "core/MolfileReader.h"
 #include "core/MolfileWriter.h"
@@ -216,6 +217,105 @@ private slots:
         QCOMPARE(loaded.atoms().size(), 1);
         QCOMPARE(loadedLayer.items().size(), 2);
         QVERIFY(SvgWriter::write(loaded, loadedLayer.items()).contains("polyline"));
+    }
+    void undoCoversMoleculeAndAnnotationsInOrder() {
+        Molecule molecule;
+        ReactionLayer layer(&molecule);
+        EditHistory history(&molecule, &layer);
+        molecule.addAtom(0, 0);
+        QVERIFY(layer.addArrow(40, 0, 120, 0) >= 0);
+        molecule.addAtom(200, 0);
+
+        QVERIFY(history.undo());
+        QCOMPARE(molecule.atomData().size(), 1);
+        QCOMPARE(layer.items().size(), 1);
+        QVERIFY(history.undo());
+        QCOMPARE(layer.items().size(), 0);
+        QCOMPARE(molecule.atomData().size(), 1);
+        QVERIFY(history.undo());
+        QCOMPARE(molecule.atomData().size(), 0);
+        QVERIFY(!history.undo());
+
+        QVERIFY(history.redo());
+        QCOMPARE(molecule.atomData().size(), 1);
+        QVERIFY(history.redo());
+        QCOMPARE(layer.items().size(), 1);
+        QVERIFY(history.redo());
+        QCOMPARE(molecule.atomData().size(), 2);
+        QVERIFY(!history.redo());
+    }
+    void clearAllUndoesInOneStep() {
+        Molecule molecule;
+        ReactionLayer layer(&molecule);
+        EditHistory history(&molecule, &layer);
+        molecule.addAtom(0, 0);
+        QVERIFY(layer.addLabel("heat", 80, -20) >= 0);
+        history.clearAll();
+        QCOMPARE(molecule.atomData().size(), 0);
+        QCOMPARE(layer.items().size(), 0);
+        QVERIFY(history.undo());
+        QCOMPARE(molecule.atomData().size(), 1);
+        QCOMPARE(layer.items().size(), 1);
+    }
+    void loadingASchemeResetsSharedHistory() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("scheme.rcd");
+        Molecule molecule;
+        ReactionLayer layer(&molecule);
+        EditHistory history(&molecule, &layer);
+        molecule.addAtom(0, 0);
+        QVERIFY(layer.addArrow(40, 0, 120, 0) >= 0);
+        QVERIFY(layer.saveToFile(path));
+        QVERIFY(layer.loadFromFile(path));
+        QVERIFY(!history.undo());
+        QCOMPARE(molecule.atomData().size(), 1);
+        QCOMPARE(layer.items().size(), 1);
+    }
+    void valenceLimitsFollowFormalCharge() {
+        Molecule molecule;
+        const int nitrogen = molecule.addAtom(0, 0, "N");
+        for (int index = 0; index < 3; ++index)
+            QVERIFY(molecule.addBond(nitrogen, molecule.addAtom(48 * (index + 1), 0)) >= 0);
+        const int fourth = molecule.addAtom(0, 48);
+        QCOMPARE(molecule.addBond(nitrogen, fourth), -1);
+        QVERIFY(molecule.setAtomCharge(nitrogen, 1));
+        QVERIFY(molecule.addBond(nitrogen, fourth) >= 0);
+        QVERIFY(!molecule.setAtomCharge(nitrogen, 0));
+
+        Molecule ether;
+        const int oxygen = ether.addAtom(0, 0, "O");
+        ether.addBond(oxygen, ether.addAtom(48, 0));
+        ether.addBond(oxygen, ether.addAtom(-48, 0));
+        QVERIFY(!ether.setAtomCharge(oxygen, -1));
+
+        Molecule ammonium;
+        QVERIFY(ammonium.setAtomCharge(ammonium.addAtom(0, 0, "N"), 1));
+        QCOMPARE(ammonium.formula(), QString("H4N+"));
+        Molecule hydroxide;
+        QVERIFY(hydroxide.setAtomCharge(hydroxide.addAtom(0, 0, "O"), -1));
+        QCOMPARE(hydroxide.formula(), QString("HO-"));
+        Molecule methylCation;
+        QVERIFY(methylCation.setAtomCharge(methylCation.addAtom(0, 0), 1));
+        QCOMPARE(methylCation.formula(), QString("CH3+"));
+    }
+    void preservesWavyBondsInMolfiles() {
+        Molecule source;
+        const int a = source.addAtom(0, 0);
+        const int b = source.addAtom(48, 0);
+        const int c = source.addAtom(96, 0);
+        QVERIFY(source.setBondStyle(source.addBond(a, b), "wavy"));
+        QVERIFY(source.setBondStyle(source.addBond(b, c, 2), "wavy"));
+        const QString molfile = MolfileWriter::writeV2000(source);
+        QVERIFY(molfile.contains("  1  2  1  4"));
+        QVERIFY(molfile.contains("  2  3  2  3"));
+
+        Molecule loaded;
+        QString error;
+        QVERIFY(MolfileReader::readV2000(molfile, &loaded, &error));
+        QCOMPARE(loaded.bondData().at(0).style, QString("wavy"));
+        QCOMPARE(loaded.bondData().at(1).style, QString("wavy"));
+        QCOMPARE(loaded.bondData().at(1).order, 2);
     }
 };
 

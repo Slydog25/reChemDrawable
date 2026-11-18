@@ -62,6 +62,7 @@ void Molecule::replaceContent(const QVector<Atom> &atoms, const QVector<Bond> &b
     for (const Bond &bond : m_bonds) m_nextBondId = qMax(m_nextBondId, bond.id + 1);
     m_undo.clear();
     m_redo.clear();
+    emit historyReset();
     emit changed();
 }
 
@@ -103,8 +104,8 @@ bool Molecule::cycleBondOrder(int bondId) {
     if (!bond) return false;
     const int nextOrder = bond->order == 3 ? 1 : bond->order + 1;
     const int adjustment = nextOrder - bond->order;
-    if (valenceUsed(bond->atomA) + adjustment > maxValence(findAtom(bond->atomA)->element) ||
-        valenceUsed(bond->atomB) + adjustment > maxValence(findAtom(bond->atomB)->element)) {
+    if (valenceUsed(bond->atomA) + adjustment > maxValence(*findAtom(bond->atomA)) ||
+        valenceUsed(bond->atomB) + adjustment > maxValence(*findAtom(bond->atomB))) {
         emit message(QStringLiteral("That bond order would exceed a basic valence limit."));
         return false;
     }
@@ -138,7 +139,7 @@ bool Molecule::removeBond(int bondId) {
 bool Molecule::setAtomElement(int atomId, const QString &element) {
     Atom *atom = findAtom(atomId);
     const QString normalized = element.trimmed();
-    if (!atom || normalized.isEmpty() || valenceUsed(atomId) > maxValence(normalized)) {
+    if (!atom || normalized.isEmpty() || valenceUsed(atomId) > maxValence(normalized, atom->formalCharge)) {
         emit message(QStringLiteral("That element cannot support the atom's existing bonds."));
         return false;
     }
@@ -151,6 +152,10 @@ bool Molecule::setAtomElement(int atomId, const QString &element) {
 bool Molecule::setAtomCharge(int atomId, int charge) {
     Atom *atom = findAtom(atomId);
     if (!atom || charge < -3 || charge > 3) return false;
+    if (valenceUsed(atomId) > maxValence(atom->element, charge)) {
+        emit message(QStringLiteral("That charge cannot support the atom's existing bonds."));
+        return false;
+    }
     const Snapshot before = snapshot();
     atom->formalCharge = charge;
     commit(before);
@@ -422,7 +427,7 @@ bool Molecule::stampRingAtAtom(const QString &templateName, int atomId, double x
     if (!anchor || sides == 0) return false;
 
     const int anchorValence = ringBondOrder(templateName, 0) + ringBondOrder(templateName, sides - 1);
-    if (valenceUsed(atomId) + anchorValence > maxValence(anchor->element)) {
+    if (valenceUsed(atomId) + anchorValence > maxValence(*anchor)) {
         emit message(QStringLiteral("That ring would exceed the selected atom's basic valence limit."));
         return false;
     }
@@ -462,8 +467,8 @@ bool Molecule::stampRingAtBond(const QString &templateName, int bondId, double x
     const int desiredSharedOrder = ringBondOrder(templateName, 0);
     const int aAddedOrder = ringBondOrder(templateName, sides - 1);
     const int bAddedOrder = ringBondOrder(templateName, 1);
-    if (valenceUsed(a->id) - sharedBond->order + desiredSharedOrder + aAddedOrder > maxValence(a->element) ||
-        valenceUsed(b->id) - sharedBond->order + desiredSharedOrder + bAddedOrder > maxValence(b->element)) {
+    if (valenceUsed(a->id) - sharedBond->order + desiredSharedOrder + aAddedOrder > maxValence(*a) ||
+        valenceUsed(b->id) - sharedBond->order + desiredSharedOrder + bAddedOrder > maxValence(*b)) {
         emit message(QStringLiteral("That ring would exceed the selected bond's basic valence limit."));
         return false;
     }
@@ -506,7 +511,7 @@ bool Molecule::stampRingAtBond(const QString &templateName, int bondId, double x
 
 bool Molecule::stampFunctionalGroup(const QString &group, int atomId) {
     Atom *anchor = findAtom(atomId);
-    if (!anchor || valenceUsed(atomId) + 1 > maxValence(anchor->element)) return false;
+    if (!anchor || valenceUsed(atomId) + 1 > maxValence(*anchor)) return false;
     const Snapshot before = snapshot();
     const QPointF firstPoint(anchor->x + GeometryEngine::StandardBondLength, anchor->y);
     const auto appendAtom = [this](const QString &element, const QPointF &point) {
@@ -585,15 +590,15 @@ bool Molecule::cleanUpStructure() {
 bool Molecule::canAddBond(int atomA, int atomB, int order) const {
     if (atomA == atomB || !findAtom(atomA) || !findAtom(atomB) || order < 1 || order > 3) return false;
     for (const Bond &bond : m_bonds) if ((bond.atomA == atomA && bond.atomB == atomB) || (bond.atomA == atomB && bond.atomB == atomA)) return false;
-    return valenceUsed(atomA) + order <= maxValence(findAtom(atomA)->element) &&
-           valenceUsed(atomB) + order <= maxValence(findAtom(atomB)->element);
+    return valenceUsed(atomA) + order <= maxValence(*findAtom(atomA)) &&
+           valenceUsed(atomB) + order <= maxValence(*findAtom(atomB));
 }
 
 QString Molecule::formula() const {
     QMap<QString, int> counts;
     for (const Atom &atom : m_atoms) {
         counts[atom.element] += 1;
-        const int implicitHydrogen = qMax(0, maxValence(atom.element) - valenceUsed(atom.id) - qAbs(atom.formalCharge));
+        const int implicitHydrogen = qMax(0, maxValence(atom) - valenceUsed(atom.id));
         if (atom.element != QStringLiteral("H")) counts[QStringLiteral("H")] += implicitHydrogen;
     }
     QString result;
@@ -626,7 +631,7 @@ QVariantMap Molecule::properties() const {
         molecularWeight += averageMass.value(atom.element);
         exactMass += atom.isotope ? atom.isotope : monoisotopicMass.value(atom.element);
         if (atom.element != QStringLiteral("H")) {
-            const int hydrogen = qMax(0, maxValence(atom.element) - valenceUsed(atom.id) - qAbs(atom.formalCharge));
+            const int hydrogen = qMax(0, maxValence(atom) - valenceUsed(atom.id));
             molecularWeight += hydrogen * averageMass.value(QStringLiteral("H"));
             exactMass += hydrogen * monoisotopicMass.value(QStringLiteral("H"));
         }
@@ -720,13 +725,22 @@ const Bond *Molecule::findBond(int id) const { for (const Bond &bond : m_bonds) 
 
 int Molecule::valenceUsed(int atomId) const { int total = 0; for (const Bond &bond : m_bonds) if (bond.atomA == atomId || bond.atomB == atomId) total += bond.order; return total; }
 
-int Molecule::maxValence(const QString &element) const {
+int Molecule::maxValence(const QString &element, int charge) const {
     static const QHash<QString, int> values = {{QStringLiteral("C"), 4}, {QStringLiteral("N"), 3}, {QStringLiteral("O"), 2},
         {QStringLiteral("S"), 6}, {QStringLiteral("P"), 5}, {QStringLiteral("F"), 1}, {QStringLiteral("Cl"), 1},
         {QStringLiteral("Br"), 1}, {QStringLiteral("I"), 1}, {QStringLiteral("H"), 1}};
-    return values.value(element, 4);
+    const auto found = values.constFind(element);
+    // Unknown elements stay permissive and ignore charge.
+    if (found == values.cend()) return 4;
+    // Carbon and hydrogen lose a bonding site for either sign of charge (carbocation,
+    // carbanion, proton, hydride). Group 15-17 atoms gain one per positive charge
+    // (ammonium, oxonium) and lose one per negative charge (amide, alkoxide, halide).
+    if (element == QStringLiteral("C") || element == QStringLiteral("H")) return qMax(0, *found - qAbs(charge));
+    return qMax(0, *found + charge);
 }
+
+int Molecule::maxValence(const Atom &atom) const { return maxValence(atom.element, atom.formalCharge); }
 
 Molecule::Snapshot Molecule::snapshot() const { return {m_atoms, m_bonds, m_nextAtomId, m_nextBondId}; }
 void Molecule::restore(const Snapshot &value) { m_atoms = value.atoms; m_bonds = value.bonds; m_nextAtomId = value.nextAtomId; m_nextBondId = value.nextBondId; }
-void Molecule::commit(const Snapshot &before) { m_undo.append(before); m_redo.clear(); emit changed(); }
+void Molecule::commit(const Snapshot &before) { m_undo.append(before); m_redo.clear(); emit committed(); emit changed(); }
