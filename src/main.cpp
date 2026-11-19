@@ -3,6 +3,7 @@
 #include "core/Molecule.h"
 #include "core/ReactionLayer.h"
 #include "platform/InputRouter.h"
+#include "platform/PanZoomGesture.h"
 #include "platform/PenTool.h"
 #include "platform/QmlJitWorkaround.h"
 #include "platform/QtfbClient.h"
@@ -97,6 +98,7 @@ int main(int argc, char *argv[]) {
             static Qt::MouseButtons pressedButtons;
             static InputRouter router;
             static TwoFingerTap twoFingerTap;
+            static PanZoomGesture panZoom;
             static QElapsedTimer clock;
             if (!clock.isValid()) clock.start();
             static bool eraserStroke = false;
@@ -135,8 +137,8 @@ int main(int argc, char *argv[]) {
                 const QRectF canvasArea = canvas ? canvas->mapRectToScene(QRectF(0, 0, canvas->width(), canvas->height()))
                                                  : QRectF();
                 if (isTouch) {
-                    // Two-finger tap anywhere = Undo (not while the pen is down).
-                    const bool tapped = twoFingerTap.feed(input.devId, static_cast<TwoFingerTap::Phase>(phase),
+                    // Two-finger tap anywhere = Undo, three-finger tap = Redo (not while the pen is down).
+                    const int tapped = twoFingerTap.feed(input.devId, static_cast<TwoFingerTap::Phase>(phase),
                                                           position, clock.elapsed());
                     if (twoFingerTap.fingersDown() >= 2 && router.cancelTouch() && (pressedButtons & Qt::LeftButton)) {
                         // The first finger had pressed a menu button: release it
@@ -146,7 +148,19 @@ int main(int argc, char *argv[]) {
                         QMouseEvent cancel(QEvent::MouseButtonRelease, away, away, Qt::LeftButton, pressedButtons, Qt::NoModifier);
                         QCoreApplication::sendEvent(window, &cancel);
                     }
-                    if (tapped && !router.penDown()) editHistory.undo();
+                    // Two fingers moving on the canvas pan and pinch-zoom it. A drag that
+                    // engaged a pan is never also a tap.
+                    const PanZoomGesture::Step step = panZoom.feed(input.devId, static_cast<PanZoomGesture::Phase>(phase),
+                                                                   position, canvasArea, router.penDown());
+                    if (step.valid && canvas && !window->property("dialogOpen").toBool()) {
+                        const QPointF local = canvas->mapFromScene(step.center);
+                        QMetaObject::invokeMethod(canvas.data(), "panZoomBy", Q_ARG(QVariant, step.dx), Q_ARG(QVariant, step.dy),
+                                                  Q_ARG(QVariant, step.scale), Q_ARG(QVariant, local.x()), Q_ARG(QVariant, local.y()));
+                    }
+                    if (tapped && !router.penDown() && !panZoom.engaged()) {
+                        if (tapped == 3) editHistory.redo();
+                        else editHistory.undo();
+                    }
                 }
                 if (!router.accept(isTouch ? InputRouter::Source::Touch : InputRouter::Source::Pen, phase, position,
                                    canvasArea, window->property("dialogOpen").toBool(), input.devId))

@@ -4,9 +4,10 @@
 #include <QPointF>
 #include <QtGlobal>
 
-// Recognises a quick two-finger tap (used for undo on the tablet): two fingers
-// land within a quarter second of each other, neither moves far, no third
-// finger joins, and both are lifted within half a second of the first touch.
+// Recognises a quick two- or three-finger tap (two = undo, three = redo on the
+// tablet): the fingers land within a quarter second of the first, none moves
+// far, no fourth finger joins, and all are lifted within half a second of the
+// first touch.
 class TwoFingerTap {
 public:
     // Same order as InputRouter::Phase, so main.cpp can convert between them.
@@ -16,9 +17,9 @@ public:
     static constexpr qint64 MaxDurationMs = 500;
     static constexpr double MaxMovement = 40.0;
 
-    // Feed every finger event. Returns true for the release that completes a
-    // two-finger tap.
-    bool feed(int fingerId, Phase phase, const QPointF &position, qint64 timeMs);
+    // Feed every finger event. Returns the number of fingers (2 or 3) for the
+    // release that completes a tap, otherwise 0.
+    int feed(int fingerId, Phase phase, const QPointF &position, qint64 timeMs);
     int fingersDown() const;
 
 private:

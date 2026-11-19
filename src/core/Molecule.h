@@ -47,6 +47,14 @@ public:
     Q_INVOKABLE QVariantList pasteAtoms(double x, double y);
     Q_INVOKABLE bool setBondStyle(int bondId, const QString &style);
     Q_INVOKABLE bool cycleBondStyle(int bondId);
+    // Double bonds: 0 centred, +1 / -1 second line to either side of the atom axis.
+    Q_INVOKABLE bool setBondDoubleSide(int bondId, int side);
+    Q_INVOKABLE bool cycleBondDoubleSide(int bondId);
+    // Ids of the atoms inside a closed polygon of {x, y} points (even-odd rule).
+    Q_INVOKABLE QVariantList atomsInPolygon(const QVariantList &points) const;
+    // Copies the given atoms and the bonds between them, offset by (dx, dy), as
+    // one undoable step. Does not touch the clipboard. Returns the new atom ids.
+    Q_INVOKABLE QVariantList duplicateAtoms(const QVariantList &atomIds, double dx, double dy);
     Q_INVOKABLE int atomAt(double x, double y, double radius = 20.0) const;
     Q_INVOKABLE int bondAt(double x, double y, double tolerance = 12.0) const;
     Q_INVOKABLE QPointF snappedBondEnd(int atomId, double x, double y) const;

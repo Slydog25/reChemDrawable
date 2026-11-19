@@ -32,6 +32,8 @@ set(PLATFORM_SOURCES
     src/platform/InputRouter.cpp
     src/platform/InputRouter.h
     src/platform/PenTool.cpp
+    src/platform/PanZoomGesture.cpp
+    src/platform/PanZoomGesture.h
     src/platform/PenTool.h
     src/platform/QmlJitWorkaround.h
     src/platform/QtfbClient.cpp
@@ -82,6 +84,8 @@ if(BUILD_TESTING)
         src/platform/InputRouter.cpp
         src/platform/InputRouter.h
         src/platform/PenTool.cpp
+        src/platform/PanZoomGesture.cpp
+        src/platform/PanZoomGesture.h
         src/platform/PenTool.h
         src/platform/TwoFingerTap.cpp
         src/platform/TwoFingerTap.h
@@ -113,6 +117,20 @@ if(BUILD_TESTING)
     target_link_libraries(arrow_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME arrow_tests COMMAND arrow_tests)
     set_tests_properties(arrow_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(interaction_tests
+        tests/test_interaction.cpp
+        src/platform/PanZoomGesture.cpp
+        src/platform/PanZoomGesture.h
+        src/platform/TwoFingerTap.cpp
+        src/platform/TwoFingerTap.h
+        ${CORE_SOURCES}
+        ${CORE_HEADERS}
+    )
+    target_include_directories(interaction_tests PRIVATE src)
+    target_link_libraries(interaction_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME interaction_tests COMMAND interaction_tests)
+    set_tests_properties(interaction_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     # QML interaction tests: drive MoleculeCanvas with simulated taps and drags.
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)
