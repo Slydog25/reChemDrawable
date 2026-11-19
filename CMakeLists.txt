@@ -109,6 +109,7 @@ if(BUILD_TESTING)
     rechemdraw_add_test(stereo_tests tests/test_stereo.cpp)      # CIP R/S and E/Z
     rechemdraw_add_test(label_tests tests/test_labels.cpp)
     rechemdraw_add_test(smiles_import_tests tests/test_smiles_import.cpp)  # parser, 2D layout, .smi
+    rechemdraw_add_test(stereo_smiles_tests tests/test_stereo_smiles.cpp)  # SMILES stereo, invert
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
     qt_add_executable(qml_tests tests/qml_tests.cpp)

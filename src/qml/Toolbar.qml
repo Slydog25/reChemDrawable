@@ -95,7 +95,7 @@ Rectangle {
                 model: [
                     ["draw", "draw", "Draw"], ["select", "select", "Select"],
                     ["move", "move", "Move"], ["pan", "pan", "Pan"],
-                    ["bond", "bond", "Bond"], ["stereo", "style", "Style"],
+                    ["bond", "bond", "Bond"], ["stereo", "style", "Style"], ["invert", "invert", "Invert"],
                     ["ring", "ring", "Ring"], ["chain", "chain", "Chain"], ["arrow", "arrow", "Arrow"],
                     ["label", "text", "Text"], ["erase", "erase", "Erase"]
                 ]

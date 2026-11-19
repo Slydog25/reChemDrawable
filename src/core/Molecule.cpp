@@ -1277,6 +1277,93 @@ bool Molecule::importSmiles(const QString &smiles, double x, double y) {
     return true;
 }
 
+bool Molecule::invertStereocentre(int atomId) {
+    if (!findAtom(atomId)) return false;
+    bool any = false;
+    for (const Bond &bond : std::as_const(m_bonds))
+        if (bond.atomA == atomId && (bond.style == QStringLiteral("wedge") || bond.style == QStringLiteral("dash"))) any = true;
+    if (!any) {
+        emit message(QStringLiteral("Nothing to invert: no wedge or dash bond starts at this atom."));
+        return false;
+    }
+    const Snapshot before = snapshot();
+    for (Bond &bond : m_bonds) {
+        if (bond.atomA != atomId) continue;
+        if (bond.style == QStringLiteral("wedge")) bond.style = QStringLiteral("dash");
+        else if (bond.style == QStringLiteral("dash")) bond.style = QStringLiteral("wedge");
+    }
+    commit(before);
+    return true;
+}
+
+bool Molecule::invertDoubleBond(int bondId) {
+    const Bond *target = findBond(bondId);
+    if (!target || target->order != 2) return false;
+    const int a = target->atomA, b = target->atomB;
+    // Atoms on each side of the double bond (the bond itself removed).
+    const auto side = [&](int start) {
+        QSet<int> seen{start};
+        QVector<int> queue{start};
+        for (int head = 0; head < queue.size(); ++head) {
+            for (const Bond &bond : std::as_const(m_bonds)) {
+                if (bond.id == bondId) continue;
+                int next = -1;
+                if (bond.atomA == queue[head]) next = bond.atomB;
+                else if (bond.atomB == queue[head]) next = bond.atomA;
+                if (next >= 0 && !seen.contains(next)) { seen.insert(next); queue.append(next); }
+            }
+        }
+        return seen;
+    };
+    const QSet<int> sideA = side(a);
+    if (sideA.contains(b)) {
+        emit message(QStringLiteral("A double bond in a ring cannot be inverted."));
+        return false;
+    }
+    const QSet<int> sideB = side(b);
+    const bool moveB = sideB.size() <= sideA.size();
+    const QSet<int> &moving = moveB ? sideB : sideA;
+    const Atom *pa = findAtom(a), *pb = findAtom(b);
+    if (!pa || !pb) return false;
+    const QPointF origin(pa->x, pa->y);
+    QPointF axis(pb->x - pa->x, pb->y - pa->y);
+    const double length = qSqrt(axis.x() * axis.x() + axis.y() * axis.y());
+    if (length < 1e-9) return false;
+    axis /= length;
+    const Snapshot before = snapshot();
+    for (Atom &atom : m_atoms) {
+        if (!moving.contains(atom.id)) continue;
+        const QPointF v(atom.x - origin.x(), atom.y - origin.y());
+        const double along = v.x() * axis.x() + v.y() * axis.y();
+        const QPointF foot = origin + axis * along;
+        atom.x = 2 * foot.x() - atom.x;
+        atom.y = 2 * foot.y() - atom.y;
+    }
+    for (Bond &bond : m_bonds) {
+        if (bond.id == bondId) continue;
+        // A mirror image of a centre needs the opposite wedge to keep its configuration.
+        if (moving.contains(bond.atomA)) {
+            if (bond.style == QStringLiteral("wedge")) bond.style = QStringLiteral("dash");
+            else if (bond.style == QStringLiteral("dash")) bond.style = QStringLiteral("wedge");
+        }
+        if (bond.doubleSide != 0 && moving.contains(bond.atomA) && moving.contains(bond.atomB)) bond.doubleSide = -bond.doubleSide;
+    }
+    commit(before);
+    return true;
+}
+
+bool Molecule::invertStereoAt(double x, double y) {
+    const int atomId = atomAt(x, y, 22.0);
+    if (atomId >= 0) return invertStereocentre(atomId);
+    const int bondId = bondAt(x, y, 16.0);
+    if (bondId >= 0) {
+        const Bond *bond = findBond(bondId);
+        if (bond && bond->order == 2) return invertDoubleBond(bondId);
+    }
+    emit message(QStringLiteral("Tap a stereocentre atom or a double bond to invert it."));
+    return false;
+}
+
 double Molecule::standardBondLength() const { return GeometryEngine::StandardBondLength; }
 
 // The snapshot gets its own copy of the lists rather than sharing them (Qt's

@@ -317,6 +317,68 @@ int rankingAtomicNumber(const QString &element) {
     return element.isEmpty() ? 0 : Elements::atomicNumber(element.left(1));
 }
 
+int chiralParity(const QVector<Arm> &arms) {
+    if (arms.size() != 4) return 0;
+    double v[4][3];
+    double sum[3] = {0, 0, 0};
+    int implicitIndex = -1;
+    for (int i = 0; i < 4; ++i) {
+        if (arms[i].implicit) {
+            if (implicitIndex >= 0) return 0;
+            implicitIndex = i;
+            continue;
+        }
+        double dx = arms[i].dx, dy = -arms[i].dy;
+        const double len = qSqrt(dx * dx + dy * dy);
+        if (len < 1e-6) return 0;
+        v[i][0] = dx / len; v[i][1] = dy / len; v[i][2] = arms[i].z;
+        for (int k = 0; k < 3; ++k) sum[k] += v[i][k];
+    }
+    if (implicitIndex >= 0) {
+        const double len = qSqrt(sum[0] * sum[0] + sum[1] * sum[1] + sum[2] * sum[2]);
+        if (len < 1e-6) return 0;
+        for (int k = 0; k < 3; ++k) v[implicitIndex][k] = -sum[k] / len;
+    }
+    const double a[3] = {v[1][0] - v[0][0], v[1][1] - v[0][1], v[1][2] - v[0][2]};
+    const double b[3] = {v[2][0] - v[0][0], v[2][1] - v[0][1], v[2][2] - v[0][2]};
+    const double c[3] = {v[3][0] - v[0][0], v[3][1] - v[0][1], v[3][2] - v[0][2]};
+    const double volume = a[0] * (b[1] * c[2] - b[2] * c[1]) + a[1] * (b[2] * c[0] - b[0] * c[2]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+    if (qAbs(volume) < 0.05) return 0;
+    return volume < 0 ? 1 : -1;
+}
+
+int chiralParity(const Molecule &molecule, int centerId, const QVector<int> &order) {
+    const Context ctx(molecule);
+    const Atom *center = ctx.atom(centerId);
+    if (!center || hasMultipleBond(ctx, centerId)) return 0;
+    const QVector<Bond> bonds = ctx.bondsOf(centerId);
+    bool anchored = false;
+    for (const Bond &bond : bonds)
+        if (bond.atomA == centerId && (bond.style == QStringLiteral("wedge") || bond.style == QStringLiteral("dash"))) anchored = true;
+    if (!anchored) return 0;
+    const int hydrogens = ctx.hydrogens(*center);
+    if (!tetrahedralCandidate(*center, bonds.size() + hydrogens, bonds.size())) return 0;
+    if (order.size() != 4 || bonds.size() + (hydrogens > 0 ? 1 : 0) != 4 || hydrogens > 1) return 0;
+    QVector<Arm> arms;
+    for (const int id : order) {
+        Arm arm;
+        if (id == 0) {
+            arm.implicit = true;
+        } else {
+            const Bond *found = nullptr;
+            for (const Bond &bond : bonds) if (Context::other(bond, centerId) == id) found = &bond;
+            const Atom *n = ctx.atom(id);
+            if (!found || !n) return 0;
+            arm.dx = n->x - center->x; arm.dy = n->y - center->y;
+            if (found->atomA == centerId && found->style == QStringLiteral("wedge")) arm.z = 1;
+            else if (found->atomA == centerId && found->style == QStringLiteral("dash")) arm.z = -1;
+        }
+        arms.append(arm);
+    }
+    if (hydrogens == 0) for (const Arm &arm : arms) if (arm.implicit) return 0;
+    return chiralParity(arms);
+}
+
 QVector<Descriptor> compute(const Molecule &molecule) {
     QVector<Descriptor> result;
     const Context ctx(molecule);
