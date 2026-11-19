@@ -94,4 +94,36 @@ TestCase {
         grabImage(findChild(window, "moleculeCanvas")).save("/workspace/build-pc/screen-smiles.png")
         window.destroy()
     }
+
+    // Mechanism marks, a transition-state bracket and the tidy/check buttons.
+    function test_mechanism() {
+        const component = Qt.createComponent("../../src/qml/Main.qml")
+        const window = component.createObject(null, { width: 1620, height: 2160 })
+        document.newDocument()
+        molecule.importSmiles("C=C", 250, 300)
+        molecule.importSmiles("BrBr", 600, 420)
+        molecule.importSmiles("BrCCBr", 1250, 330)
+        reactionLayer.addLabel("+", 430, 360)
+        reactionLayer.addArrowKind("forward", 780, 400, 1000, 380)
+        reactionLayer.addLabelSnapped("CH2Cl2", 890, 360)
+        findChild(window, "moleculeCanvas").fitToContent()
+        wait(200)
+        grabImage(window.contentItem).save("/workspace/build-pc/screen-mechanism-before.png")
+        editHistory.tidyScheme()
+        window.runBalanceCheck()
+        const a = molecule.addAtom(300, 800), b = molecule.addAtom(348, 800, "Br"), c = molecule.addAtom(252, 800)
+        molecule.addBond(a, b); molecule.setBondStyle(molecule.bonds()[molecule.bonds().length - 1].id, "partial")
+        molecule.addBond(a, c)
+        reactionLayer.addBracket(200, 740, 420, 860, true)
+        reactionLayer.addLabel("δ+", 300, 770)
+        reactionLayer.addLabel("δ−", 355, 770)
+        reactionLayer.addDagger(700, 800)
+        reactionLayer.addOrbital(800, 800, 0, -1, true)
+        reactionLayer.addOrbital(900, 800, 1, 0.3, false)
+        findChild(window, "moleculeCanvas").fitToContent()
+        wait(400)
+        grabImage(window.contentItem).save("/workspace/build-pc/screen-mechanism-after.png")
+        const popup = findChild(window, "mechanismPopup")
+        window.destroy()
+    }
 }

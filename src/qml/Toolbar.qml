@@ -31,6 +31,8 @@ Rectangle {
     signal boldToggled(bool enabled)
     signal mirrorRequested(bool horizontal)
     signal alignRequested(string alignment)
+    signal checkRequested()
+    signal tidyRequested()
     signal gridSnapToggled(bool enabled)
     signal stereoLabelsToggled(bool visible)
 
@@ -131,6 +133,8 @@ Rectangle {
             RailButton { iconName: "svg"; caption: "SVG"; onClicked: root.exportSvgRequested() }
             RailButton { iconName: "smiles"; caption: "SMILES"; onClicked: root.exportSmilesRequested() }
             RailButton { iconName: "clean"; caption: "Clean"; onClicked: root.cleanupRequested() }
+            RailButton { objectName: "checkButton"; iconName: "check"; caption: "Check"; onClicked: root.checkRequested() }
+            RailButton { objectName: "tidyButton"; iconName: "tidy"; caption: "Tidy"; onClicked: root.tidyRequested() }
             RailButton { iconName: "rotate"; caption: "Rotate"; onClicked: root.rotateRequested() }
             RailButton { iconName: "flipH"; caption: "Flip H"; onClicked: root.mirrorRequested(true) }
             RailButton { iconName: "flipV"; caption: "Flip V"; onClicked: root.mirrorRequested(false) }
