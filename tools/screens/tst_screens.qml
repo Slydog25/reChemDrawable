@@ -38,6 +38,12 @@ TestCase {
         wait(400)
         const image = grabImage(window.contentItem)
         image.save("/workspace/build-pc/screen-main.png")
+        // Property panel for a caffeine drawing.
+        document.newDocument()
+        molecule.importSmiles("Cn1cnc2c1c(=O)n(C)c(=O)n2C", 400, 400)
+        findChild(window, "propertiesButton").clicked()
+        wait(400)
+        grabImage(window.contentItem).save("/workspace/build-pc/screen-properties.png")
         window.destroy()
     }
 

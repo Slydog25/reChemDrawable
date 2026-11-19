@@ -26,6 +26,18 @@ struct Info {
 
 const Info *find(const QString &symbol);
 
+// One naturally occurring isotope: mass number, exact atomic mass (u) and natural
+// abundance (fraction, summing to 1 per element). Values from IUPAC/AME tables.
+struct Isotope {
+    int massNumber;
+    double mass;
+    double abundance;
+};
+
+// Natural isotopes of the element, ascending by mass number; empty when the
+// element has no isotope data (then isotope patterns cannot include it).
+const QVector<Isotope> &isotopes(const QString &symbol);
+
 // Most bond-order units the atom may carry with this formal charge.
 int maxValence(const QString &symbol, int charge);
 

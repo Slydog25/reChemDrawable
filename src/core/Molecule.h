@@ -113,6 +113,10 @@ public:
     // Hydrogens implied on a non-hydrogen atom by its element, charge, and bonds.
     int implicitHydrogens(const Atom &atom) const;
     Q_INVOKABLE QVariantMap properties() const;
+    // Property-panel values (DoU, Lipinski, TPSA, elemental analysis, isotope
+    // pattern) for the whole drawing, or for the connected components containing
+    // the given atom ids; see Properties.h.
+    Q_INVOKABLE QVariantMap propertyReport(const QVariantList &selectedAtomIds = QVariantList()) const;
     Q_INVOKABLE bool saveToFile(const QString &path);
     Q_INVOKABLE bool loadFromFile(const QString &path);
     Q_INVOKABLE bool saveSvgToFile(const QString &path);
