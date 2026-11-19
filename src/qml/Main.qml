@@ -111,12 +111,27 @@ ApplicationWindow {
                     Label { text: "Text"; font.pixelSize: 19; font.bold: true }
                     TextField {
                         id: reactionLabelField
+                        objectName: "reactionLabelField"
                         Layout.preferredWidth: 230
                         Layout.preferredHeight: 52
                         text: window.reactionLabel
                         placeholderText: "conditions"
                         font.pixelSize: 19
                         onTextChanged: window.reactionLabel = text
+                    }
+                    Button {
+                        objectName: "importSmilesButton"
+                        text: "Import SMILES"
+                        Layout.preferredHeight: 52
+                        font.pixelSize: 17
+                        enabled: reactionLabelField.text.trim().length > 0
+                        onClicked: {
+                            const center = editor.modelPoint(editor.width / 2, editor.height / 2)
+                            if (molecule.importSmiles(reactionLabelField.text, center.x, center.y)) {
+                                window.selectedAtom = -1
+                                editor.fitToContent()
+                            }
+                        }
                     }
                     Item { Layout.fillWidth: true }
                 }
@@ -264,7 +279,7 @@ ApplicationWindow {
                     width: ListView.view.width
                     height: 72
                     font.pixelSize: 20
-                    text: modelData.name + "    " + modelData.modified + (modelData.kind === "molfile" ? "    .mol" : "")
+                    text: modelData.name + "    " + modelData.modified + (modelData.kind === "molfile" ? "    .mol" : modelData.kind === "smiles" ? "    .smi" : "")
                     onClicked: {
                         const path = modelData.path
                         openDialog.close()
