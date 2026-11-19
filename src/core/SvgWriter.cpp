@@ -1,11 +1,68 @@
 #include "SvgWriter.h"
 
 #include "Molecule.h"
+#include "ReactionLayer.h"
 
 #include <QHash>
 #include <QTextStream>
 
 namespace {
+// Arrowhead chevron with its tip at (tx, ty) travelling along unit (ux, uy). side 0
+// draws both barbs, +1 / -1 only the barb on that side of the shaft (half head).
+void writeHead(QTextStream &stream, double tx, double ty, double ux, double uy, int side, double size = 13.0, double spread = 7.0) {
+    const double nx = -uy, ny = ux;
+    stream << "<polyline fill=\"none\" points=\"";
+    if (side >= 0) stream << tx - ux * size + nx * spread << ',' << ty - uy * size + ny * spread << ' ';
+    stream << tx << ',' << ty;
+    if (side <= 0) stream << ' ' << tx - ux * size - nx * spread << ',' << ty - uy * size - ny * spread;
+    stream << "\"/>\n";
+}
+
+void writeLine(QTextStream &stream, double x1, double y1, double x2, double y2, const char *extra = "") {
+    stream << "<line x1=\"" << x1 << "\" y1=\"" << y1 << "\" x2=\"" << x2 << "\" y2=\"" << y2 << "\"" << extra << "/>\n";
+}
+
+void writeArrow(QTextStream &stream, const QVariantMap &item) {
+    const double x1 = item.value(QStringLiteral("x1")).toDouble(), y1 = item.value(QStringLiteral("y1")).toDouble();
+    const double x2 = item.value(QStringLiteral("x2")).toDouble(), y2 = item.value(QStringLiteral("y2")).toDouble();
+    const double dx = x2 - x1, dy = y2 - y1, length = qSqrt(dx * dx + dy * dy);
+    if (length < 0.01) return;
+    const QString kind = ReactionLayer::normalizedKind(item.value(QStringLiteral("kind")).toString());
+    const double ux = dx / length, uy = dy / length, nx = -uy, ny = ux;
+    stream << "<g class=\"arrow-" << kind << "\">\n";
+    if (kind == QStringLiteral("curved") || kind == QStringLiteral("fishhook")) {
+        const double cx = item.value(QStringLiteral("cx"), (x1 + x2) / 2).toDouble(), cy = item.value(QStringLiteral("cy"), (y1 + y2) / 2).toDouble();
+        double tx = x2 - cx, ty = y2 - cy;
+        const double tl = qSqrt(tx * tx + ty * ty);
+        if (tl < 0.01) { tx = ux; ty = uy; } else { tx /= tl; ty /= tl; }
+        stream << "<path fill=\"none\" d=\"M" << x1 << ',' << y1 << " Q" << cx << ',' << cy << ' ' << x2 << ',' << y2 << "\"/>\n";
+        writeHead(stream, x2, y2, tx, ty, kind == QStringLiteral("fishhook") ? 1 : 0);
+    } else if (kind == QStringLiteral("equilibrium")) {
+        writeLine(stream, x1 + nx * 4, y1 + ny * 4, x2 + nx * 4, y2 + ny * 4);
+        writeHead(stream, x2 + nx * 4, y2 + ny * 4, ux, uy, 1);
+        writeLine(stream, x2 - nx * 4, y2 - ny * 4, x1 - nx * 4, y1 - ny * 4);
+        writeHead(stream, x1 - nx * 4, y1 - ny * 4, -ux, -uy, 1);
+    } else if (kind == QStringLiteral("retro")) {
+        const double back = qMin(length * 0.5, 14.0);
+        writeLine(stream, x1 + nx * 4, y1 + ny * 4, x2 - ux * back + nx * 4, y2 - uy * back + ny * 4);
+        writeLine(stream, x1 - nx * 4, y1 - ny * 4, x2 - ux * back - nx * 4, y2 - uy * back - ny * 4);
+        writeHead(stream, x2, y2, ux, uy, 0, 16, 11);
+    } else if (kind == QStringLiteral("resonance")) {
+        writeLine(stream, x1, y1, x2, y2);
+        writeHead(stream, x2, y2, ux, uy, 0);
+        writeHead(stream, x1, y1, -ux, -uy, 0);
+    } else {
+        writeLine(stream, x1, y1, x2, y2, kind == QStringLiteral("dashed") ? " stroke-dasharray=\"9 6\"" : "");
+        writeHead(stream, x2, y2, ux, uy, 0);
+        if (kind == QStringLiteral("noreaction")) {
+            const double mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+            writeLine(stream, mx - (ux + nx) * 9, my - (uy + ny) * 9, mx + (ux + nx) * 9, my + (uy + ny) * 9);
+            writeLine(stream, mx - (ux - nx) * 9, my - (uy - ny) * 9, mx + (ux - nx) * 9, my + (uy - ny) * 9);
+        }
+    }
+    stream << "</g>\n";
+}
+
 QString escaped(const QString &text) {
     QString value = text;
     return value.replace('&', QStringLiteral("&amp;")).replace('<', QStringLiteral("&lt;")).replace('>', QStringLiteral("&gt;"));
@@ -32,6 +89,13 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
         if (!boundsInitialized) { minX = maxX = x1; minY = maxY = y1; boundsInitialized = true; }
         minX = qMin(minX, qMin(x1, x2)); maxX = qMax(maxX, qMax(x1, x2));
         minY = qMin(minY, qMin(y1, y2)); maxY = qMax(maxY, qMax(y1, y2));
+        if (item.contains(QStringLiteral("cx")) && ReactionLayer::isCurvedKind(item.value(QStringLiteral("kind")).toString())) {
+            // The curve stays inside the hull of its three points; its apex is half-way to the control point.
+            const double cx = item.value(QStringLiteral("cx")).toDouble(), cy = item.value(QStringLiteral("cy")).toDouble();
+            const double apexX = (x1 + 2 * cx + x2) / 4, apexY = (y1 + 2 * cy + y2) / 4;
+            minX = qMin(minX, apexX); maxX = qMax(maxX, apexX);
+            minY = qMin(minY, apexY); maxY = qMax(maxY, apexY);
+        }
     }
     constexpr double padding = 32.0;
     QString output;
@@ -91,14 +155,7 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
     for (const QVariant &value : reactionItems) {
         const QVariantMap item = value.toMap();
         if (item.value(QStringLiteral("type")).toString() != QStringLiteral("arrow")) continue;
-        const double x1 = item.value(QStringLiteral("x1")).toDouble(), y1 = item.value(QStringLiteral("y1")).toDouble();
-        const double x2 = item.value(QStringLiteral("x2")).toDouble(), y2 = item.value(QStringLiteral("y2")).toDouble();
-        const double dx = x2 - x1, dy = y2 - y1, length = qSqrt(dx * dx + dy * dy);
-        if (length < 0.01) continue;
-        const double ux = dx / length, uy = dy / length, nx = -uy, ny = ux;
-        stream << "<line x1=\"" << x1 << "\" y1=\"" << y1 << "\" x2=\"" << x2 << "\" y2=\"" << y2 << "\"/>\n";
-        stream << "<polyline fill=\"none\" points=\"" << x2 - ux * 13 + nx * 7 << ',' << y2 - uy * 13 + ny * 7 << ' '
-               << x2 << ',' << y2 << ' ' << x2 - ux * 13 - nx * 7 << ',' << y2 - uy * 13 - ny * 7 << "\"/>\n";
+        writeArrow(stream, item);
     }
     stream << "</g>\n<g font-family=\"sans-serif\" font-size=\"20\" text-anchor=\"middle\" dominant-baseline=\"middle\">\n";
     for (const Atom &atom : atoms) {
@@ -111,8 +168,10 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
     for (const QVariant &value : reactionItems) {
         const QVariantMap item = value.toMap();
         if (item.value(QStringLiteral("type")).toString() == QStringLiteral("label")) {
+            const QString text = item.value(QStringLiteral("text")).toString();
+            const bool bold = item.contains(QStringLiteral("bold")) ? item.value(QStringLiteral("bold")).toBool() : ReactionLayer::isCompoundNumber(text);
             stream << "<text x=\"" << item.value(QStringLiteral("x1")).toDouble() << "\" y=\"" << item.value(QStringLiteral("y1")).toDouble()
-                   << "\" stroke=\"none\">" << escaped(item.value(QStringLiteral("text")).toString()) << "</text>\n";
+                   << "\" stroke=\"none\"" << (bold ? " font-weight=\"bold\"" : "") << ">" << escaped(text) << "</text>\n";
         }
     }
     stream << "</g>\n</svg>\n";

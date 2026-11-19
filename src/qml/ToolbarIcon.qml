@@ -59,6 +59,14 @@ Canvas {
             const tangent = end + (anticlockwise ? -Math.PI / 2 : Math.PI / 2)
             head(cx + r * Math.cos(end) + 2 * Math.cos(tangent), cy + r * Math.sin(end) + 2 * Math.sin(tangent), tangent, 9)
         }
+        const chev = function(x, y, angle, side, size) {
+            const s = size || 10, ca = Math.cos(angle), sa = Math.sin(angle)
+            ctx.beginPath()
+            if (side >= 0) { ctx.moveTo(x - s * ca + s * 0.55 * -sa, y - s * sa + s * 0.55 * ca); ctx.lineTo(x, y) }
+            else ctx.moveTo(x, y)
+            if (side <= 0) ctx.lineTo(x - s * ca - s * 0.55 * -sa, y - s * sa - s * 0.55 * ca)
+            ctx.stroke()
+        }
         const hexagon = function(cx, cy, r) {
             const points = []
             for (let i = 0; i < 6; ++i) points.push([cx + r * Math.cos(Math.PI / 6 + i * Math.PI / 3), cy + r * Math.sin(Math.PI / 6 + i * Math.PI / 3)])
@@ -117,6 +125,27 @@ Canvas {
             break
         case "ring": hexagon(22, 22, 16); break
         case "arrow": arrow(4, 22, 40, 22); break
+        // Reaction arrow kinds (Arrows row). chev: open barbs at (x, y) along `angle`;
+        // side 0 both barbs, +1/-1 one barb (half head).
+        case "akForward": line(4, 22, 40, 22); chev(40, 22, 0, 0); break
+        case "akEquilibrium":
+            line(4, 15, 40, 15); chev(40, 15, 0, -1)
+            line(40, 29, 4, 29); chev(4, 29, Math.PI, -1)
+            break
+        case "akRetro":
+            line(4, 17, 28, 17); line(4, 27, 28, 27); chev(40, 22, 0, 0, 14)
+            break
+        case "akResonance": line(8, 22, 36, 22); chev(40, 22, 0, 0); chev(4, 22, Math.PI, 0); break
+        case "akDashed": line(4, 22, 11, 22); line(16, 22, 23, 22); line(28, 22, 34, 22); chev(40, 22, 0, 0); break
+        case "akNoReaction": line(4, 22, 40, 22); chev(40, 22, 0, 0); line(16, 11, 28, 33); line(28, 11, 16, 33); break
+        case "akCurved":
+            ctx.beginPath(); ctx.moveTo(6, 36); ctx.quadraticCurveTo(22, -4, 38, 32); ctx.stroke()
+            chev(38, 32, Math.atan2(32 + 4, 38 - 22), 0, 12)
+            break
+        case "akFishhook":
+            ctx.beginPath(); ctx.moveTo(6, 36); ctx.quadraticCurveTo(22, -4, 38, 32); ctx.stroke()
+            chev(38, 32, Math.atan2(32 + 4, 38 - 22), 1, 12)
+            break
         case "text": // serif T
             line(9, 8, 35, 8); line(22, 8, 22, 37); line(9, 8, 9, 13); line(35, 8, 35, 13); line(16, 37, 28, 37)
             break
