@@ -124,9 +124,11 @@ Canvas {
             ctx.lineWidth = 3
             break
         case "ring": hexagon(22, 22, 16); break
-        case "chain": // zig-zag with atom dots
-            path([[4, 30], [14, 14], [24, 30], [34, 14], [40, 22]])
-            dot(4, 30, 3); dot(24, 30, 3); dot(34, 14, 3)
+        case "chain": // a chain being dragged out: zig-zag ending in a drag arrow, with a count
+            path([[4, 34], [11, 26], [18, 34], [25, 26]], false)
+            arrow(25, 26, 40, 26)
+            ctx.font = "bold 11px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"
+            ctx.fillText("C5", 7, 16)
             break
         case "arrow": arrow(4, 22, 40, 22); break
         // Reaction arrow kinds (Arrows row). chev: open barbs at (x, y) along `angle`;
@@ -200,7 +202,10 @@ Canvas {
         case "mol": page("MOL"); break
         case "svg": page("SVG"); break
         case "smiles": page("SMI"); break
-        case "export": page("EXP"); break
+        case "export": // tray with an arrow leaving it
+            path([[6, 24], [6, 38], [38, 38], [38, 24]], false)
+            arrow(22, 30, 22, 5)
+            break
         case "properties": // table rows beside a small bar chart
             box(5, 6, 34, 32); line(5, 15, 39, 15)
             line(10, 22, 18, 22); line(10, 29, 18, 29)
