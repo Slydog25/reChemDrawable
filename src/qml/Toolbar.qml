@@ -35,6 +35,7 @@ Rectangle {
     signal gridSnapToggled(bool enabled)
     signal stereoLabelsToggled(bool visible)
     signal propertiesRequested()
+    signal cleanScreenRequested()
 
     implicitWidth: 252
     color: "#f7f5ed"
@@ -148,6 +149,7 @@ Rectangle {
             RailButton { iconName: "delete"; caption: "Delete"; onClicked: root.deleteSelectionRequested() }
             RailButton { iconName: "clear"; caption: "Clear"; onClicked: root.clearRequested() }
             RailButton { objectName: "propertiesButton"; iconName: "properties"; caption: "Properties"; onClicked: root.propertiesRequested() }
+            RailButton { objectName: "cleanScreenButton"; iconName: "cleanScreen"; caption: "Clean screen"; onClicked: root.cleanScreenRequested() }
             RailButton { objectName: "exitButton"; iconName: "exit"; caption: "Exit"; onClicked: root.exitRequested() }
         }
     }

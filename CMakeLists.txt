@@ -65,6 +65,13 @@ target_include_directories(rechemdraw_core PUBLIC src)
 target_link_libraries(rechemdraw_core PUBLIC Qt6::Core Qt6::Gui)
 
 qt_add_library(rechemdraw_platform STATIC
+    src/platform/DirtyRect.cpp
+    src/platform/DirtyRect.h
+    src/platform/DisplayController.h
+    src/platform/DisplayProtocol.cpp
+    src/platform/DisplayProtocol.h
+    src/platform/RefreshPolicy.cpp
+    src/platform/RefreshPolicy.h
     src/platform/InputRouter.cpp
     src/platform/InputRouter.h
     src/platform/PanZoomGesture.cpp
@@ -118,6 +125,8 @@ if(BUILD_TESTING)
     rechemdraw_add_test(smiles_import_tests tests/test_smiles_import.cpp)  # parser, 2D layout, .smi
     rechemdraw_add_test(properties_tests tests/test_properties.cpp)  # DoU, Lipinski, TPSA, isotope pattern
     rechemdraw_add_test(stereo_smiles_tests tests/test_stereo_smiles.cpp)  # SMILES stereo, invert
+
+    rechemdraw_add_test(display_tests tests/test_display.cpp)  # e-ink updates, refresh modes, keyboard, rotation
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
     qt_add_executable(qml_tests tests/qml_tests.cpp)

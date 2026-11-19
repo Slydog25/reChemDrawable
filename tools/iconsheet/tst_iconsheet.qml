@@ -14,7 +14,7 @@ Rectangle {
                          "undo", "redo", "grid", "zoomIn", "zoomOut", "fit", "new", "load", "save", "mol",
                          "svg", "smiles", "export", "clean", "rotate", "flipH", "flipV", "alignH", "alignV", "copy",
                          "paste", "delete", "clear", "exit", "duplicate", "bold", "stereo",
-                         "akForward", "akEquilibrium", "akRetro", "akResonance", "akDashed", "akNoReaction", "akCurved", "akFishhook", "properties"]
+                         "akForward", "akEquilibrium", "akRetro", "akResonance", "akDashed", "akNoReaction", "akCurved", "akFishhook", "properties", "cleanScreen"]
     Grid {
         x: 10; y: 10
         columns: 8

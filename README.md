@@ -47,6 +47,18 @@ Inside an already-sourced SDK shell, `./build-rmpp.sh` does the same build direc
 
 Before deploying, copy the manifest format from the installed AppLoad release into `packaging/appload/external.manifest.json`; AppLoad metadata is community-tool-version-specific and must be validated on the actual device.
 
+## E-ink display, keyboard and landscape (AppLoad)
+
+The protocol details below come from reading AppLoad's source (rm-appload: `src/qtfb/common.h`, `fbmanagement.cpp`, `FBController.cpp`, `libraryexternals.cpp`); the logic is unit tested in `tests/test_display.cpp`, but none of it has been run on a tablet yet.
+
+- **Partial updates.** Each present compares the new frame with the last one sent and sends only the changed rectangle (padded by 16 px) as `UPDATE_PARTIAL`; the whole screen when most of it changed. Idle frames send nothing.
+- **Fast ink.** The first pen event switches AppLoad to the FAST waveform and frames are presented every 40 ms (every 250 ms when idle). 1.2 s after the pen lifts the default (UI) waveform returns and one clean update of the drawn area is sent. Finger taps on the menus do not switch waveforms. AppLoad sleeps one second after each refresh-mode or full-refresh message before reading the next, so the first stroke after a pause may show up up to a second late; `RECHEMDRAW_REFRESH_SWITCH=0` (set in `reChemDrawable.sh`) turns the waveform switching off.
+- **Clean screen** (toolbar) asks AppLoad for a full refresh to clear ghosting and resends the whole picture.
+- **On-screen keyboard.** The manifest has `supportsVirtualKeyboard`; AppLoad then shows a keyboard button in the app's title bar. Tap it, tap the Text or Import SMILES field, and type. Key presses arrive as Qt key codes and are delivered to the focused field.
+- **Landscape.** The manifest has `supportsRotation`; use AppLoad's rotate button on the window. AppLoad turns the picture itself and reports the rotation; the app then lays out at 2160x1620, draws into the portrait framebuffer rotated the opposite way and maps touches back. If the picture comes out upside down after a quarter turn, set `RECHEMDRAW_FLIP_ROTATION=1` in `reChemDrawable.sh` (the left/right direction is derived from AppLoad's painting code, not tested). The toolbar rail scrolls in landscape.
+
+Unverified until tried on the device: whether the FAST waveform looks right for ink, the one-second stall after a mode switch, keyboard focus delivery under the offscreen platform, and the rotation direction.
+
 ## Coordinates and chemistry conventions
 
 Canvas coordinates use a 48-pixel standard bond length. Molfile export converts these into 1.0-unit 2D coordinates and flips the Y axis, so structures retain their proportions in desktop chemistry tools. Atoms are always explicit in the graph and in Molfiles; carbon labels are merely hidden in the renderer.

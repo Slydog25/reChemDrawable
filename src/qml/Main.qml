@@ -60,6 +60,8 @@ ApplicationWindow {
                 onZoomOutRequested: editor.zoomOut()
                 onFitRequested: editor.fitToContent()
                 onCleanupRequested: molecule.cleanUpStructure()
+                // `eink` exists only on the tablet build: a full e-ink refresh to clear ghosting.
+                onCleanScreenRequested: if (typeof eink !== "undefined") eink.requestCleanScreen()
                 onRotateRequested: editor.rotateSelection()
                 onDeleteSelectionRequested: editor.deleteSelection()
                 onCopyRequested: editor.copySelection()
