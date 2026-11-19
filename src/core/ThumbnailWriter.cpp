@@ -85,9 +85,11 @@ QImage ThumbnailWriter::render(const Molecule &molecule, const QVariantList &rea
         painter.setPen(ink);
         painter.drawText(target, Qt::AlignCenter, text);
     };
+    // Same labels as the canvas (OH, H₂N, OMe, charges), so previews match the drawing.
     for (const Atom &atom : atoms) {
-        if (atom.element == QStringLiteral("C") && !atom.formalCharge && !atom.isotope) continue;
-        drawText(atom.element, map(QPointF(atom.x, atom.y)), true);
+        const Molecule::AtomDisplay display = molecule.atomDisplay(atom);
+        if (!display.showLabel && !display.charge) continue;
+        drawText((display.showLabel ? display.text : QString()) + display.chargeLabel, map(QPointF(atom.x, atom.y)), true);
     }
 
     for (const QVariant &value : reactionItems) {
