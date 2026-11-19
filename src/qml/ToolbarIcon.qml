@@ -201,6 +201,11 @@ Canvas {
         case "svg": page("SVG"); break
         case "smiles": page("SMI"); break
         case "export": page("EXP"); break
+        case "properties": // table rows beside a small bar chart
+            box(5, 6, 34, 32); line(5, 15, 39, 15)
+            line(10, 22, 18, 22); line(10, 29, 18, 29)
+            line(24, 34, 24, 26); line(29, 34, 29, 20); line(34, 34, 34, 29)
+            break
 
         // Editing
         case "stereo": // stereocentre: one wedge, one hashed bond, two plain bonds

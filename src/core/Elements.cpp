@@ -49,6 +49,33 @@ const Info *find(const QString &symbol) {
     return it == table().cend() ? nullptr : &it.value();
 }
 
+const QVector<Isotope> &isotopes(const QString &symbol) {
+    // The single place natural isotope data lives (used by the isotope pattern).
+    static const QHash<QString, QVector<Isotope>> data = {
+        {QStringLiteral("H"), {{1, 1.00782503, 0.999885}, {2, 2.01410178, 0.000115}}},
+        {QStringLiteral("Li"), {{6, 6.0151223, 0.0759}, {7, 7.0160041, 0.9241}}},
+        {QStringLiteral("B"), {{10, 10.0129370, 0.199}, {11, 11.0093054, 0.801}}},
+        {QStringLiteral("C"), {{12, 12.0, 0.9893}, {13, 13.0033548, 0.0107}}},
+        {QStringLiteral("N"), {{14, 14.0030740, 0.99636}, {15, 15.0001089, 0.00364}}},
+        {QStringLiteral("O"), {{16, 15.9949146, 0.99757}, {17, 16.9991317, 0.00038}, {18, 17.9991604, 0.00205}}},
+        {QStringLiteral("F"), {{19, 18.9984032, 1.0}}},
+        {QStringLiteral("Na"), {{23, 22.9897693, 1.0}}},
+        {QStringLiteral("Mg"), {{24, 23.9850417, 0.7899}, {25, 24.9858370, 0.1000}, {26, 25.9825930, 0.1101}}},
+        {QStringLiteral("Si"), {{28, 27.9769265, 0.92223}, {29, 28.9764947, 0.04685}, {30, 29.9737702, 0.03092}}},
+        {QStringLiteral("P"), {{31, 30.9737616, 1.0}}},
+        {QStringLiteral("S"), {{32, 31.9720707, 0.9499}, {33, 32.9714585, 0.0075}, {34, 33.9678669, 0.0425}, {36, 35.9670808, 0.0001}}},
+        {QStringLiteral("Cl"), {{35, 34.9688527, 0.7576}, {37, 36.9659026, 0.2424}}},
+        {QStringLiteral("K"), {{39, 38.9637069, 0.932581}, {40, 39.9639987, 0.000117}, {41, 40.9618260, 0.067302}}},
+        {QStringLiteral("Se"), {{74, 73.9224759, 0.0089}, {76, 75.9192137, 0.0937}, {77, 76.9199146, 0.0763},
+                                {78, 77.9173095, 0.2377}, {80, 79.9165218, 0.4961}, {82, 81.9166995, 0.0873}}},
+        {QStringLiteral("Br"), {{79, 78.9183376, 0.5069}, {81, 80.9162897, 0.4931}}},
+        {QStringLiteral("I"), {{127, 126.904473, 1.0}}},
+    };
+    static const QVector<Isotope> none;
+    const auto it = data.constFind(symbol);
+    return it == data.cend() ? none : it.value();
+}
+
 int maxValence(const QString &symbol, int charge) {
     const Info *info = find(symbol);
     if (!info) return 4;

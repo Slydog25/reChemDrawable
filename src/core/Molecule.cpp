@@ -1,4 +1,5 @@
 #include "Molecule.h"
+#include "Properties.h"
 
 #include "Abbreviations.h"
 #include "Elements.h"
@@ -1140,6 +1141,12 @@ QVariantMap Molecule::properties() const {
     return {{QStringLiteral("formula"), formula()}, {QStringLiteral("molecularWeight"), molecularWeight},
             {QStringLiteral("exactMass"), exactMass}, {QStringLiteral("atomCount"), m_atoms.size()},
             {QStringLiteral("bondCount"), m_bonds.size()}, {QStringLiteral("unknownElements"), unknown}};
+}
+
+QVariantMap Molecule::propertyReport(const QVariantList &selectedAtomIds) const {
+    QVector<int> ids;
+    for (const QVariant &id : selectedAtomIds) ids.append(id.toInt());
+    return Properties::toVariant(Properties::compute(*this, ids));
 }
 
 bool Molecule::saveToFile(const QString &path) {

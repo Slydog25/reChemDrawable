@@ -26,6 +26,7 @@ set(CORE_SOURCES
     src/core/Molecule.cpp
     src/core/MolfileReader.cpp
     src/core/MolfileWriter.cpp
+    src/core/Properties.cpp
     src/core/ReactionLayer.cpp
     src/core/SmilesReader.cpp
     src/core/SmilesWriter.cpp
@@ -48,6 +49,7 @@ set(CORE_HEADERS
     src/core/Molecule.h
     src/core/MolfileReader.h
     src/core/MolfileWriter.h
+    src/core/Properties.h
     src/core/ReactionLayer.h
     src/core/SmilesReader.h
     src/core/SmilesWriter.h
@@ -114,6 +116,7 @@ if(BUILD_TESTING)
     rechemdraw_add_test(label_tests tests/test_labels.cpp)
     rechemdraw_add_test(export_tests tests/test_exports.cpp)     # PNG, PDF, CDXML, reMarkable library
     rechemdraw_add_test(smiles_import_tests tests/test_smiles_import.cpp)  # parser, 2D layout, .smi
+    rechemdraw_add_test(properties_tests tests/test_properties.cpp)  # DoU, Lipinski, TPSA, isotope pattern
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
     qt_add_executable(qml_tests tests/qml_tests.cpp)

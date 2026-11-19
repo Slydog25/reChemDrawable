@@ -21,7 +21,7 @@ ApplicationWindow {
     property string reactionLabel: "conditions"
     property string arrowKind: "forward"
     // Read by main.cpp: while a dialog covers the canvas, a finger may use it.
-    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || exportDialog.visible || elementPalette.popupOpen
+    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || exportDialog.visible || elementPalette.popupOpen || propertiesPanel.visible
 
     Shortcut { sequences: [StandardKey.Undo]; onActivated: editHistory.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: editHistory.redo() }
@@ -68,6 +68,7 @@ ApplicationWindow {
                 onBoldToggled: function(enabled) { editor.boldLines = enabled }
                 onMirrorRequested: function(horizontal) { editor.mirrorSelection(horizontal) }
                 onAlignRequested: function(alignment) { editor.alignSelection(alignment) }
+                onPropertiesRequested: propertiesPanel.open()
             }
 
             ColumnLayout {
@@ -280,6 +281,11 @@ ApplicationWindow {
         if (!document.dirty) return
         close.accepted = false
         exitApp()
+    }
+
+    PropertiesPanel {
+        id: propertiesPanel
+        selectedAtoms: editor.selectedAtoms
     }
 
     Popup {
