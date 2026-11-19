@@ -272,6 +272,14 @@ Canvas {
             path([[24, 13], [24, 5], [6, 5], [6, 39], [24, 39], [24, 31]], false)
             arrow(14, 22, 40, 22)
             break
+        case "check": // balanced scales: pan beam on a post
+            line(22, 8, 22, 36); line(12, 36, 32, 36); line(8, 14, 36, 14)
+            path([[8, 14], [3, 26], [13, 26]], false); path([[36, 14], [31, 26], [41, 26]], false)
+            break
+        case "tidy": // blocks and arrows lined up on one baseline
+            line(4, 40, 40, 40)
+            box(3, 14, 9, 14); arrow(14, 21, 24, 21); box(26, 10, 14, 22)
+            break
         case "clear": // empty the canvas
             box(5, 6, 34, 32); line(14, 14, 30, 30); line(30, 14, 14, 30)
             break

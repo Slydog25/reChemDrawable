@@ -81,7 +81,8 @@ QVariantMap bondMap(const Bond &bond) {
 bool isBondStyle(const QString &style) {
     return style == QStringLiteral("plain") || style == QStringLiteral("wedge") ||
            style == QStringLiteral("dash") || style == QStringLiteral("wavy") ||
-           style == QStringLiteral("aromatic") || style == QStringLiteral("benzene");
+           style == QStringLiteral("aromatic") || style == QStringLiteral("benzene") ||
+           style == QStringLiteral("partial");
 }
 
 int ringSides(const QString &templateName) {
@@ -325,7 +326,7 @@ Molecule::AtomDisplay Molecule::atomDisplay(const Atom &atom) const {
         const int otherId = bond.atomA == atom.id ? bond.atomB : bond.atomB == atom.id ? bond.atomA : -1;
         if (otherId < 0) continue;
         ++degree;
-        bondSum += bond.order;
+        if (bond.style != QStringLiteral("partial")) bondSum += bond.order;
         const Atom *other = findAtom(otherId);
         if (!other) continue;
         const double dx = other->x - atom.x, dy = other->y - atom.y;
@@ -543,6 +544,8 @@ bool Molecule::setBondStyle(int bondId, const QString &style) {
     const Snapshot before = snapshot();
     bond = findBond(bondId); // detach from the snapshot's shared copy before writing
     bond->style = style;
+    // A partial (forming/breaking) bond is a dashed single line; it has no order of its own.
+    if (style == QStringLiteral("partial")) bond->order = 1;
     // Keep the stored stereo flag in V2000 terms, matching MolfileReader/Writer.
     bond->stereo = style == QStringLiteral("wedge") ? 1 : style == QStringLiteral("dash") ? 6 :
                    style == QStringLiteral("wavy") ? (bond->order == 2 ? 3 : 4) : 0;
@@ -625,7 +628,7 @@ bool Molecule::cycleBondStyle(int bondId) {
     // A double bond has no wedge/dash/wavy meaning; the Style tool moves its second line instead.
     if (bond->order == 2) return cycleBondDoubleSide(bondId);
     const QStringList styles = {QStringLiteral("plain"), QStringLiteral("wedge"), QStringLiteral("dash"),
-                                QStringLiteral("wavy"), QStringLiteral("aromatic")};
+                                QStringLiteral("wavy"), QStringLiteral("aromatic"), QStringLiteral("partial")};
     const int index = styles.indexOf(bond->style);
     return setBondStyle(bondId, styles[(index + 1) % styles.size()]);
 }
@@ -1219,7 +1222,8 @@ const Atom *Molecule::findAtom(int id) const { for (const Atom &atom : m_atoms) 
 Bond *Molecule::findBond(int id) { for (Bond &bond : m_bonds) if (bond.id == id) return &bond; return nullptr; }
 const Bond *Molecule::findBond(int id) const { for (const Bond &bond : m_bonds) if (bond.id == id) return &bond; return nullptr; }
 
-int Molecule::valenceUsed(int atomId) const { int total = 0; for (const Bond &bond : m_bonds) if (bond.atomA == atomId || bond.atomB == atomId) total += bond.order; return total; }
+// Partial bonds (dashed forming/breaking bonds of a transition state) use no valence.
+int Molecule::valenceUsed(int atomId) const { int total = 0; for (const Bond &bond : m_bonds) if ((bond.atomA == atomId || bond.atomB == atomId) && bond.style != QStringLiteral("partial")) total += bond.order; return total; }
 
 int Molecule::maxValence(const QString &element, int charge, int radical) const {
     // A group abbreviation is attached by exactly one bond.
@@ -1235,6 +1239,7 @@ int Molecule::implicitHydrogens(const Atom &atom) const {
     double sum = 0.0;
     for (const Bond &bond : m_bonds) {
         if (bond.atomA != atom.id && bond.atomB != atom.id) continue;
+        if (bond.style == QStringLiteral("partial")) continue;
         sum += bond.style == QStringLiteral("aromatic") ? 1.5 : bond.order;
     }
     if (Abbreviations::isAbbreviation(atom.element)) return 0;

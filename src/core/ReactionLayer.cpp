@@ -3,6 +3,7 @@
 #include "Molecule.h"
 #include "MolfileReader.h"
 #include "MolfileWriter.h"
+#include "SchemeAnalysis.h"
 
 #include <QDir>
 #include <QFile>
@@ -182,6 +183,60 @@ int ReactionLayer::addLabel(const QString &text, double x, double y) {
     return id;
 }
 
+int ReactionLayer::addDagger(double x, double y) {
+    const Snapshot before = snapshot();
+    const int id = m_nextId++;
+    Item item{id, QStringLiteral("dagger"), x, y, x, y, {}};
+    m_items.append(item);
+    commit(before);
+    return id;
+}
+
+int ReactionLayer::addBracket(double x1, double y1, double x2, double y2, bool withDagger) {
+    const double left = qMin(x1, x2), right = qMax(x1, x2), top = qMin(y1, y2), bottom = qMax(y1, y2);
+    if (right - left < 12.0 || bottom - top < 12.0) return -1;
+    const Snapshot before = snapshot();
+    const int id = m_nextId++;
+    Item item{id, QStringLiteral("bracket"), left, top, right, bottom, {}};
+    item.kind = withDagger ? QStringLiteral("dagger") : QStringLiteral("plain");
+    m_items.append(item);
+    commit(before);
+    return id;
+}
+
+int ReactionLayer::addOrbital(double x, double y, double dirX, double dirY, bool shaded) {
+    double length = std::sqrt(dirX * dirX + dirY * dirY);
+    if (length < 1e-6) { dirX = 0.0; dirY = -1.0; length = 1.0; }
+    const Snapshot before = snapshot();
+    const int id = m_nextId++;
+    // (x2, y2) is the tip of the first lobe; the other lobe is its mirror through (x1, y1).
+    Item item{id, QStringLiteral("orbital"), x, y, x + dirX / length * OrbitalLobeLength, y + dirY / length * OrbitalLobeLength, {}};
+    item.kind = shaded ? QStringLiteral("shaded") : QStringLiteral("plain");
+    m_items.append(item);
+    commit(before);
+    return id;
+}
+
+bool ReactionLayer::setArrowEnds(int itemId, double startX, double startY, double endX, double endY) {
+    for (Item &item : m_items) {
+        if (item.id != itemId || item.type != QStringLiteral("arrow") || isCurvedKind(item.kind)) continue;
+        if (item.x1 == startX && item.y1 == startY && item.x2 == endX && item.y2 == endY) return false;
+        const Snapshot before = snapshot();
+        for (Item &target : m_items) {
+            if (target.id != itemId) continue;
+            target.x1 = startX; target.y1 = startY; target.x2 = endX; target.y2 = endY;
+            target.cx = (startX + endX) / 2.0; target.cy = (startY + endY) / 2.0;
+        }
+        commit(before);
+        return true;
+    }
+    return false;
+}
+
+QVariantList ReactionLayer::checkBalance() const {
+    return m_molecule ? SchemeAnalysis::checkReactions(*m_molecule, items()) : QVariantList();
+}
+
 int ReactionLayer::itemAt(double x, double y, double tolerance) const {
     const QPointF point(x, y);
     for (auto iterator = m_items.crbegin(); iterator != m_items.crend(); ++iterator) {
@@ -190,6 +245,19 @@ int ReactionLayer::itemAt(double x, double y, double tolerance) const {
             const double distance = isCurvedKind(iterator->kind) ? curveDistance(point, a, QPointF(iterator->cx, iterator->cy), b)
                                                                  : segmentDistance(point, a, b);
             if (distance <= tolerance) return iterator->id;
+        }
+        if (iterator->type == QStringLiteral("dagger")) {
+            if (qAbs(x - iterator->x1) <= tolerance && qAbs(y - iterator->y1) <= tolerance + 4.0) return iterator->id;
+        }
+        if (iterator->type == QStringLiteral("bracket")) {
+            // Only the bracket strokes hit, so atoms inside the brackets stay reachable.
+            const double edge = qMin(segmentDistance(point, QPointF(iterator->x1, iterator->y1), QPointF(iterator->x1, iterator->y2)),
+                                     segmentDistance(point, QPointF(iterator->x2, iterator->y1), QPointF(iterator->x2, iterator->y2)));
+            if (edge <= tolerance) return iterator->id;
+        }
+        if (iterator->type == QStringLiteral("orbital")) {
+            const QPointF centre(iterator->x1, iterator->y1), tip(iterator->x2, iterator->y2);
+            if (segmentDistance(point, centre * 2.0 - tip, tip) <= tolerance) return iterator->id;
         }
         if (iterator->type == QStringLiteral("label")) {
             const double halfWidth = qMax(24.0, iterator->text.size() * 5.5);
@@ -235,6 +303,8 @@ bool ReactionLayer::saveToFile(const QString &path) {
             object.insert(QStringLiteral("kind"), item.kind);
             if (isCurvedKind(item.kind)) { object.insert(QStringLiteral("cx"), item.cx); object.insert(QStringLiteral("cy"), item.cy); }
         }
+        // Mechanism marks: bracket kind plain/dagger, orbital kind plain/shaded.
+        if (item.type == QStringLiteral("bracket") || item.type == QStringLiteral("orbital")) object.insert(QStringLiteral("kind"), item.kind);
         annotations.append(object);
     }
     // The Molfile cannot store where a double bond's second line goes, or lone
@@ -254,6 +324,13 @@ bool ReactionLayer::saveToFile(const QString &path) {
                          {QStringLiteral("lonePairs"), lonePairs},
                          {QStringLiteral("circledCharges"), m_molecule->circledCharges()}};
     if (anySide) document.insert(QStringLiteral("bondSides"), bondSides);
+    // Partial (dashed forming/breaking) bonds have no Molfile form; the Molfile holds them
+    // as plain single bonds and this list, by bond index, restores the style.
+    QJsonArray partialBonds;
+    const QVector<Bond> &savedBonds = m_molecule->bondData();
+    for (int index = 0; index < savedBonds.size(); ++index)
+        if (savedBonds[index].style == QStringLiteral("partial")) partialBonds.append(index);
+    if (!partialBonds.isEmpty()) document.insert(QStringLiteral("partialBonds"), partialBonds);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly)) return false;
     file.write(QJsonDocument(document).toJson(QJsonDocument::Indented));
@@ -280,11 +357,17 @@ bool ReactionLayer::loadFromFile(const QString &path) {
     for (const QJsonValue &value : root.value(QStringLiteral("annotations")).toArray()) {
         const QJsonObject object = value.toObject();
         const QString type = object.value(QStringLiteral("type")).toString();
-        if ((type != QStringLiteral("arrow") && type != QStringLiteral("label")) || !object.contains(QStringLiteral("x1")) || !object.contains(QStringLiteral("y1"))) continue;
+        const bool known = type == QStringLiteral("arrow") || type == QStringLiteral("label") || type == QStringLiteral("dagger") ||
+                           type == QStringLiteral("bracket") || type == QStringLiteral("orbital");
+        if (!known || !object.contains(QStringLiteral("x1")) || !object.contains(QStringLiteral("y1"))) continue;
         const int id = object.value(QStringLiteral("id")).toInt(nextId);
         Item item{id, type, object.value(QStringLiteral("x1")).toDouble(), object.value(QStringLiteral("y1")).toDouble(),
                   object.value(QStringLiteral("x2")).toDouble(), object.value(QStringLiteral("y2")).toDouble(), object.value(QStringLiteral("text")).toString()};
         item.kind = type == QStringLiteral("arrow") ? normalizedKind(object.value(QStringLiteral("kind")).toString()) : QStringLiteral("forward");
+        if (type == QStringLiteral("bracket"))
+            item.kind = object.value(QStringLiteral("kind")).toString() == QStringLiteral("dagger") ? QStringLiteral("dagger") : QStringLiteral("plain");
+        if (type == QStringLiteral("orbital"))
+            item.kind = object.value(QStringLiteral("kind")).toString() == QStringLiteral("shaded") ? QStringLiteral("shaded") : QStringLiteral("plain");
         item.cx = object.value(QStringLiteral("cx")).toDouble((item.x1 + item.x2) / 2.0);
         item.cy = object.value(QStringLiteral("cy")).toDouble((item.y1 + item.y2) / 2.0);
         annotations.append(item);
@@ -294,6 +377,10 @@ bool ReactionLayer::loadFromFile(const QString &path) {
     const QJsonArray bondSides = root.value(QStringLiteral("bondSides")).toArray();
     for (int index = 0; index < parsedBonds.size() && index < bondSides.size(); ++index)
         parsedBonds[index].doubleSide = qBound(-1, bondSides.at(index).toInt(), 1);
+    for (const QJsonValue &value : root.value(QStringLiteral("partialBonds")).toArray()) {
+        const int index = value.toInt(-1);
+        if (index >= 0 && index < parsedBonds.size()) { parsedBonds[index].style = QStringLiteral("partial"); parsedBonds[index].order = 1; parsedBonds[index].stereo = 0; }
+    }
     QVector<Atom> parsedAtoms = parsed.atomData();
     const QJsonArray lonePairs = root.value(QStringLiteral("lonePairs")).toArray();
     for (int index = 0; index < parsedAtoms.size() && index < lonePairs.size(); ++index)

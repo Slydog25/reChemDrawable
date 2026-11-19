@@ -32,6 +32,8 @@ Rectangle {
     signal boldToggled(bool enabled)
     signal mirrorRequested(bool horizontal)
     signal alignRequested(string alignment)
+    signal checkRequested()
+    signal tidyRequested()
     signal gridSnapToggled(bool enabled)
     signal stereoLabelsToggled(bool visible)
     signal propertiesRequested()
@@ -132,6 +134,8 @@ Rectangle {
             RailButton { iconName: "save"; caption: "Save"; onClicked: root.saveRequested() }
             RailButton { objectName: "exportButton"; iconName: "export"; caption: "Export…"; onClicked: root.exportRequested() }
             RailButton { iconName: "clean"; caption: "Clean"; onClicked: root.cleanupRequested() }
+            RailButton { objectName: "checkButton"; iconName: "check"; caption: "Check"; onClicked: root.checkRequested() }
+            RailButton { objectName: "tidyButton"; iconName: "tidy"; caption: "Tidy"; onClicked: root.tidyRequested() }
             RailButton { iconName: "rotate"; caption: "Rotate"; onClicked: root.rotateRequested() }
             RailButton { iconName: "flipH"; caption: "Flip H"; onClicked: root.mirrorRequested(true) }
             RailButton { iconName: "flipV"; caption: "Flip V"; onClicked: root.mirrorRequested(false) }

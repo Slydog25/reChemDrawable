@@ -32,6 +32,8 @@ public:
         for (int index = 0; index < bonds.size(); ++index) {
             const Bond &bond = bonds[index];
             if (!m_atomIndex.contains(bond.atomA) || !m_atomIndex.contains(bond.atomB) || bond.atomA == bond.atomB) continue;
+            // Partial (forming/breaking) bonds are not bonds yet/any more: not part of the SMILES.
+            if (bond.style == QStringLiteral("partial")) continue;
             m_edges[bond.atomA].append({bond.atomB, index});
             m_edges[bond.atomB].append({bond.atomA, index});
             if (bond.style == QStringLiteral("aromatic")) {

@@ -64,6 +64,46 @@ void writeArrow(QTextStream &stream, const QVariantMap &item) {
     stream << "</g>\n";
 }
 
+// Double dagger as strokes, centred at (x, y); MoleculeCanvas.qml draws the same shape.
+void writeDagger(QTextStream &stream, double x, double y) {
+    stream << "<g class=\"dagger\" stroke-width=\"2\">\n";
+    writeLine(stream, x, y - 10, x, y + 10);
+    writeLine(stream, x - 5, y - 4, x + 5, y - 4);
+    writeLine(stream, x - 5, y + 4, x + 5, y + 4);
+    stream << "</g>\n";
+}
+
+void writeBracket(QTextStream &stream, const QVariantMap &item) {
+    const double x1 = item.value(QStringLiteral("x1")).toDouble(), y1 = item.value(QStringLiteral("y1")).toDouble();
+    const double x2 = item.value(QStringLiteral("x2")).toDouble(), y2 = item.value(QStringLiteral("y2")).toDouble();
+    constexpr double tick = 8.0;
+    stream << "<g class=\"bracket\">\n";
+    stream << "<polyline fill=\"none\" points=\"" << x1 + tick << ',' << y1 << ' ' << x1 << ',' << y1 << ' ' << x1 << ',' << y2 << ' ' << x1 + tick << ',' << y2 << "\"/>\n";
+    stream << "<polyline fill=\"none\" points=\"" << x2 - tick << ',' << y1 << ' ' << x2 << ',' << y1 << ' ' << x2 << ',' << y2 << ' ' << x2 - tick << ',' << y2 << "\"/>\n";
+    if (item.value(QStringLiteral("kind")).toString() == QStringLiteral("dagger")) writeDagger(stream, x2 + 11, y1 - 8);
+    stream << "</g>\n";
+}
+
+// Two lobes through (x1, y1); (x2, y2) is the tip of the first lobe. Same curves as the canvas.
+void writeOrbital(QTextStream &stream, const QVariantMap &item) {
+    const double cx = item.value(QStringLiteral("x1")).toDouble(), cy = item.value(QStringLiteral("y1")).toDouble();
+    const double tx = item.value(QStringLiteral("x2")).toDouble(), ty = item.value(QStringLiteral("y2")).toDouble();
+    const double length = qSqrt((tx - cx) * (tx - cx) + (ty - cy) * (ty - cy));
+    if (length < 0.01) return;
+    const bool shaded = item.value(QStringLiteral("kind")).toString() == QStringLiteral("shaded");
+    stream << "<g class=\"orbital\">\n";
+    for (int lobe = 0; lobe < 2; ++lobe) {
+        const double sign = lobe == 0 ? 1.0 : -1.0;
+        const double ux = sign * (tx - cx) / length, uy = sign * (ty - cy) / length, nx = -uy, ny = ux;
+        const double w = 11.0;
+        const auto point = [&](double along, double across) { return QString::number(cx + ux * along + nx * across) + ',' + QString::number(cy + uy * along + ny * across); };
+        stream << "<path fill=\"" << (shaded && lobe == 0 ? "#111" : "none") << "\" d=\"M" << cx << ',' << cy
+               << " C" << point(length * 0.25, w * 1.3) << ' ' << point(length * 0.9, w) << ' ' << point(length, 0)
+               << " C" << point(length * 0.9, -w) << ' ' << point(length * 0.25, -w * 1.3) << ' ' << cx << ',' << cy << " Z\"/>\n";
+    }
+    stream << "</g>\n";
+}
+
 QString escaped(const QString &text) {
     QString value = text;
     return value.replace('&', QStringLiteral("&amp;")).replace('<', QStringLiteral("&lt;")).replace('>', QStringLiteral("&gt;"));
@@ -90,6 +130,10 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
         if (!boundsInitialized) { minX = maxX = x1; minY = maxY = y1; boundsInitialized = true; }
         minX = qMin(minX, qMin(x1, x2)); maxX = qMax(maxX, qMax(x1, x2));
         minY = qMin(minY, qMin(y1, y2)); maxY = qMax(maxY, qMax(y1, y2));
+        if (item.value(QStringLiteral("type")).toString() == QStringLiteral("orbital")) {
+            minX = qMin(minX, 2 * x1 - x2); maxX = qMax(maxX, 2 * x1 - x2);
+            minY = qMin(minY, 2 * y1 - y2); maxY = qMax(maxY, 2 * y1 - y2);
+        }
         if (item.contains(QStringLiteral("cx")) && ReactionLayer::isCurvedKind(item.value(QStringLiteral("kind")).toString())) {
             // The curve stays inside the hull of its three points; its apex is half-way to the control point.
             const double cx = item.value(QStringLiteral("cx")).toDouble(), cy = item.value(QStringLiteral("cy")).toDouble();
@@ -136,6 +180,12 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
             stream << "\"/>\n";
             continue;
         }
+        if (bond.style == QStringLiteral("partial")) {
+            // Dashed single line, as MoleculeCanvas.qml draws it.
+            stream << "<line x1=\"" << a.x << "\" y1=\"" << a.y << "\" x2=\"" << b.x << "\" y2=\"" << b.y
+                   << "\" stroke-dasharray=\"6 5\" class=\"bond-partial\"/>\n";
+            continue;
+        }
         if (bond.style == QStringLiteral("benzene")) {
             stream << "<line x1=\"" << a.x << "\" y1=\"" << a.y << "\" x2=\"" << b.x << "\" y2=\"" << b.y << "\"/>\n";
             if (bond.order == 2 && length > 0.0) {
@@ -163,7 +213,11 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
     }
     for (const QVariant &value : reactionItems) {
         const QVariantMap item = value.toMap();
-        if (item.value(QStringLiteral("type")).toString() != QStringLiteral("arrow")) continue;
+        const QString type = item.value(QStringLiteral("type")).toString();
+        if (type == QStringLiteral("dagger")) { writeDagger(stream, item.value(QStringLiteral("x1")).toDouble(), item.value(QStringLiteral("y1")).toDouble()); continue; }
+        if (type == QStringLiteral("bracket")) { writeBracket(stream, item); continue; }
+        if (type == QStringLiteral("orbital")) { writeOrbital(stream, item); continue; }
+        if (type != QStringLiteral("arrow")) continue;
         writeArrow(stream, item);
     }
     stream << "</g>\n<g font-family=\"sans-serif\" font-size=\"20\" text-anchor=\"middle\" dominant-baseline=\"middle\">\n";

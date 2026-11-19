@@ -29,6 +29,10 @@ Rectangle {
     property string labelText: "conditions"
     // forward, equilibrium, retro, resonance, dashed, noreaction, curved, fishhook
     property string arrowKind: "forward"
+    // Mechanism tool: dplus, dminus, dagger, bracket, bracketDagger, orbital, orbitalShaded, partial.
+    property string mechanismKind: "dplus"
+    // Rubber band of a bracket being dragged, in model coordinates ({x1, y1, x2, y2}) or null.
+    property var mechanismPreview: null
     // Pen path of an arrow drag in progress, in model coordinates.
     property var arrowPreviewPath: []
     // Chain tool: live preview of the zig-zag being dragged out.
@@ -109,6 +113,43 @@ Rectangle {
                 seg(mx - (ux + nx) * 9, my - (uy + ny) * 9, mx + (ux + nx) * 9, my + (uy + ny) * 9)
                 seg(mx - (ux - nx) * 9, my - (uy - ny) * 9, mx + (ux - nx) * 9, my + (uy - ny) * 9)
             }
+        }
+    }
+
+    // Mechanism marks; the SVG writer mirrors these shapes. The double dagger is drawn
+    // as strokes rather than as the U+2021 glyph, which the tablet font may lack.
+    function paintDagger(ctx, x, y) {
+        const w = ctx.lineWidth
+        ctx.lineWidth = 2
+        ctx.beginPath(); ctx.moveTo(x, y - 10); ctx.lineTo(x, y + 10)
+        ctx.moveTo(x - 5, y - 4); ctx.lineTo(x + 5, y - 4)
+        ctx.moveTo(x - 5, y + 4); ctx.lineTo(x + 5, y + 4); ctx.stroke()
+        ctx.lineWidth = w
+    }
+    function paintBracket(ctx, item) {
+        const tick = 8
+        ctx.beginPath()
+        ctx.moveTo(item.x1 + tick, item.y1); ctx.lineTo(item.x1, item.y1); ctx.lineTo(item.x1, item.y2); ctx.lineTo(item.x1 + tick, item.y2)
+        ctx.moveTo(item.x2 - tick, item.y1); ctx.lineTo(item.x2, item.y1); ctx.lineTo(item.x2, item.y2); ctx.lineTo(item.x2 - tick, item.y2)
+        ctx.stroke()
+        if (item.kind === "dagger") paintDagger(ctx, item.x2 + 11, item.y1 - 8)
+    }
+    function paintOrbital(ctx, item) {
+        const length = Math.sqrt((item.x2 - item.x1) * (item.x2 - item.x1) + (item.y2 - item.y1) * (item.y2 - item.y1))
+        if (length < 0.01) return
+        for (let lobe = 0; lobe < 2; ++lobe) {
+            const sign = lobe === 0 ? 1 : -1
+            const ux = sign * (item.x2 - item.x1) / length, uy = sign * (item.y2 - item.y1) / length, nx = -uy, ny = ux
+            const w = 11
+            const px = function(along, across) { return item.x1 + ux * along + nx * across }
+            const py = function(along, across) { return item.y1 + uy * along + ny * across }
+            ctx.beginPath()
+            ctx.moveTo(item.x1, item.y1)
+            ctx.bezierCurveTo(px(length * 0.25, w * 1.3), py(length * 0.25, w * 1.3), px(length * 0.9, w), py(length * 0.9, w), px(length, 0), py(length, 0))
+            ctx.bezierCurveTo(px(length * 0.9, -w), py(length * 0.9, -w), px(length * 0.25, -w * 1.3), py(length * 0.25, -w * 1.3), item.x1, item.y1)
+            ctx.closePath()
+            if (item.kind === "shaded" && lobe === 0) ctx.fill()
+            ctx.stroke()
         }
     }
 
@@ -400,10 +441,23 @@ Rectangle {
                 const item = reactionItems[i]
                 if (item.type === "arrow") {
                     root.paintArrow(ctx, item)
+                } else if (item.type === "dagger") {
+                    root.paintDagger(ctx, item.x1, item.y1)
+                } else if (item.type === "bracket") {
+                    root.paintBracket(ctx, item)
+                } else if (item.type === "orbital") {
+                    root.paintOrbital(ctx, item)
                 } else if (item.type === "label") {
                     ctx.font = (item.bold ? "bold " : "") + Math.round(18 * root.labelScale) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
                     ctx.fillText(item.text, item.x1, item.y1)
                 }
+            }
+            if (root.mechanismPreview) {
+                const mp = root.mechanismPreview
+                ctx.save()
+                ctx.strokeStyle = "#4d7da8"; ctx.lineWidth = 2 / root.zoom; ctx.setLineDash([6, 4])
+                ctx.strokeRect(Math.min(mp.x1, mp.x2), Math.min(mp.y1, mp.y2), Math.abs(mp.x2 - mp.x1), Math.abs(mp.y2 - mp.y1))
+                ctx.restore()
             }
             if (arrowPreviewPath.length > 1) {
                 // Live ink of the arrow being dragged.
@@ -451,6 +505,13 @@ Rectangle {
                         ctx.quadraticCurveTo(px + nx * sign * 7, py + ny * sign * 7, px, py)
                     }
                     ctx.stroke(); continue
+                }
+                if (bond.style === "partial") {
+                    // Forming/breaking bond of a transition state: dashed single line.
+                    ctx.setLineDash([6, 5])
+                    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+                    ctx.setLineDash([])
+                    continue
                 }
                 if (bond.style === "benzene") {
                     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
@@ -644,6 +705,9 @@ Rectangle {
         property real arrowStartY: 0
         property var arrowPath: []
         property bool arrowDragging: false
+        property real mechanismStartX: 0
+        property real mechanismStartY: 0
+        property int mechanismStartAtom: -1
         onPressed: function(mouse) {
             const point = root.modelPoint(mouse.x, mouse.y)
             dragStartX = mouse.x; dragStartY = mouse.y
@@ -675,6 +739,11 @@ Rectangle {
                 arrowPath = [{x: point.x, y: point.y}]
                 arrowDragging = false
                 skipNextClick = false
+            }
+            if (activeTool === "mechanism") {
+                skipNextClick = false
+                mechanismStartX = point.x; mechanismStartY = point.y
+                mechanismStartAtom = molecule.atomAt(point.x, point.y, 28 / root.zoom)
             }
             if (activeTool === "select") {
                 root.lassoPoints = [{ x: mouse.x, y: mouse.y }]
@@ -740,6 +809,11 @@ Rectangle {
                     root.arrowPreviewPath = arrowPath
                     drawing.requestPaint()
                 }
+            }
+            if (pressed && activeTool === "mechanism" && root.mechanismKind.indexOf("bracket") === 0) {
+                const point = root.modelPoint(mouse.x, mouse.y)
+                root.mechanismPreview = { x1: mechanismStartX, y1: mechanismStartY, x2: point.x, y2: point.y }
+                drawing.requestPaint()
             }
             if (pressed && activeTool === "pan") {
                 root.panX += mouse.x - dragStartX; root.panY += mouse.y - dragStartY
@@ -810,6 +884,27 @@ Rectangle {
                 if (reactionLayer.addArrowFromPath(root.arrowKind, path) >= 0) status("Reaction arrow added.")
                 else status("Reaction arrows need a longer stroke.")
                 skipNextClick = true
+            }
+            if (activeTool === "mechanism") {
+                const point = root.modelPoint(mouse.x, mouse.y)
+                root.mechanismPreview = null
+                const kind = root.mechanismKind
+                if (kind.indexOf("bracket") === 0) {
+                    if (reactionLayer.addBracket(mechanismStartX, mechanismStartY, point.x, point.y, kind === "bracketDagger") >= 0)
+                        status("Bracket added.")
+                    else status("Drag a rectangle around the intermediate or transition state.")
+                    skipNextClick = true
+                } else if (kind === "orbital" || kind === "orbitalShaded") {
+                    // Centred on the atom pressed (or the press point); the drag sets the axis,
+                    // a plain tap draws a vertical p orbital.
+                    const start = root.atomById(mechanismStartAtom)
+                    const cx = start ? start.x : mechanismStartX, cy = start ? start.y : mechanismStartY
+                    const dragged = Math.abs(mouse.x - dragStartX) > 12 || Math.abs(mouse.y - dragStartY) > 12
+                    reactionLayer.addOrbital(cx, cy, dragged ? point.x - mechanismStartX : 0, dragged ? point.y - mechanismStartY : -1, kind === "orbitalShaded")
+                    status("p orbital added.")
+                    skipNextClick = true
+                }
+                drawing.requestPaint()
             }
             arrowPath = []
             arrowDragging = false
@@ -891,6 +986,19 @@ Rectangle {
             if (activeTool === "label") {
                 if (reactionLayer.addLabelSnapped(root.labelText, point.x, point.y, 40 / root.zoom) >= 0) status("Text label added.")
                 else status("Enter label text before placing it.")
+                return
+            }
+            if (activeTool === "mechanism") {
+                const kind = root.mechanismKind
+                if (kind === "dplus") reactionLayer.addLabel("δ+", point.x, point.y)
+                else if (kind === "dminus") reactionLayer.addLabel("δ−", point.x, point.y)
+                else if (kind === "dagger") reactionLayer.addDagger(point.x, point.y)
+                else if (kind === "partial") {
+                    if (hitBond >= 0) {
+                        const wasPartial = molecule.bonds().some(function(b) { return b.id === hitBond && b.style === "partial" })
+                        molecule.setBondStyle(hitBond, wasPartial ? "plain" : "partial")
+                    } else status("Tap a bond to make it a dashed partial bond.")
+                }
                 return
             }
             if (activeTool === "bond") {

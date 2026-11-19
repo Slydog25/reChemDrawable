@@ -28,6 +28,7 @@ set(CORE_SOURCES
     src/core/MolfileWriter.cpp
     src/core/Properties.cpp
     src/core/ReactionLayer.cpp
+    src/core/SchemeAnalysis.cpp
     src/core/SmilesReader.cpp
     src/core/SmilesWriter.cpp
     src/core/Stereo.cpp
@@ -51,6 +52,7 @@ set(CORE_HEADERS
     src/core/MolfileWriter.h
     src/core/Properties.h
     src/core/ReactionLayer.h
+    src/core/SchemeAnalysis.h
     src/core/SmilesReader.h
     src/core/SmilesWriter.h
     src/core/Stereo.h
@@ -127,6 +129,7 @@ if(BUILD_TESTING)
     rechemdraw_add_test(stereo_smiles_tests tests/test_stereo_smiles.cpp)  # SMILES stereo, invert
 
     rechemdraw_add_test(display_tests tests/test_display.cpp)  # e-ink updates, refresh modes, keyboard, rotation
+    rechemdraw_add_test(mechanism_tests tests/test_mechanism.cpp)  # mechanism marks, balance check, tidy
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
     qt_add_executable(qml_tests tests/qml_tests.cpp)

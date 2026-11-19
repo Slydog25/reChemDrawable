@@ -20,8 +20,10 @@ ApplicationWindow {
     property var moleculeProperties: ({})
     property string reactionLabel: "conditions"
     property string arrowKind: "forward"
+    property string mechanismKind: "dplus"
+    property var checkResults: []
     // Read by main.cpp: while a dialog covers the canvas, a finger may use it.
-    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || exportDialog.visible || elementPalette.popupOpen || propertiesPanel.visible
+    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || exportDialog.visible || elementPalette.popupOpen || propertiesPanel.visible || mechanismPopup.visible || checkPopup.visible
 
     Shortcut { sequences: [StandardKey.Undo]; onActivated: editHistory.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: editHistory.redo() }
@@ -71,6 +73,11 @@ ApplicationWindow {
                 onMirrorRequested: function(horizontal) { editor.mirrorSelection(horizontal) }
                 onAlignRequested: function(alignment) { editor.alignSelection(alignment) }
                 onPropertiesRequested: propertiesPanel.open()
+                onCheckRequested: window.runBalanceCheck()
+                onTidyRequested: {
+                    if (editHistory.tidyScheme()) statusLine.text = "Scheme tidied; Undo restores the old layout."
+                    else statusLine.text = "Nothing to tidy: the scheme is already laid out left to right."
+                }
             }
 
             ColumnLayout {
@@ -191,6 +198,21 @@ ApplicationWindow {
                         }
                     }
                 }
+                // Mechanism notation lives in a popup so it does not take another row.
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Label { text: "Mechanism"; font.pixelSize: 19; font.bold: true; height: 52; verticalAlignment: Text.AlignVCenter }
+                    Button {
+                        objectName: "mechanismButton"
+                        text: "Mechanism…"
+                        height: 52
+                        font.pixelSize: 18
+                        checkable: true
+                        checked: window.activeTool === "mechanism"
+                        onClicked: mechanismPopup.open()
+                    }
+                }
                 // Tap-only label choices, since the tablet build has no on-screen keyboard.
                 Flow {
                     Layout.fillWidth: true
@@ -221,6 +243,7 @@ ApplicationWindow {
                     selectedAtom: window.selectedAtom
                     labelText: window.reactionLabel
                     arrowKind: window.arrowKind
+                    mechanismKind: window.mechanismKind
                     gridSnapEnabled: window.gridSnapEnabled
                     stereoLabelsVisible: window.stereoLabelsVisible
                     onSelectedAtomChangedByCanvas: function(atomId) { window.selectedAtom = atomId }
@@ -283,6 +306,84 @@ ApplicationWindow {
         if (!document.dirty) return
         close.accepted = false
         exitApp()
+    }
+
+    function runBalanceCheck() {
+        const results = reactionLayer.checkBalance()
+        if (results.length === 0) {
+            statusLine.text = "Check: draw a reaction arrow with reactants before and products after it."
+            return
+        }
+        checkResults = results
+        let balanced = 0
+        for (let i = 0; i < results.length; ++i) if (results[i].balanced) ++balanced
+        statusLine.text = "Check: " + balanced + " of " + results.length + " reaction arrows balanced."
+        checkPopup.open()
+    }
+
+    Popup {
+        id: mechanismPopup
+        objectName: "mechanismPopup"
+        parent: Overlay.overlay
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        padding: 18
+        width: 640
+        contentItem: Column {
+            spacing: 12
+            Label { text: "Mechanism notation"; font.pixelSize: 24; font.bold: true }
+            Label {
+                width: parent.width
+                text: "Choose a mark, then tap the canvas. Brackets and orbitals are drawn by dragging."
+                font.pixelSize: 17
+                wrapMode: Text.WordWrap
+            }
+            Flow {
+                width: parent.width
+                spacing: 8
+                Repeater {
+                    model: [{kind: "dplus", label: "δ+"}, {kind: "dminus", label: "δ−"}, {kind: "dagger", label: "‡"},
+                            {kind: "bracket", label: "[ ]"}, {kind: "bracketDagger", label: "[ ]‡"},
+                            {kind: "orbital", label: "p orbital"}, {kind: "orbitalShaded", label: "p shaded"},
+                            {kind: "partial", label: "Partial bond"}]
+                    delegate: Button {
+                        objectName: "mechanism_" + modelData.kind
+                        text: modelData.label
+                        width: Math.max(88, text.length * 14 + 28)
+                        height: 58
+                        font.pixelSize: 22
+                        onClicked: { window.mechanismKind = modelData.kind; window.activeTool = "mechanism"; mechanismPopup.close() }
+                    }
+                }
+            }
+            Button { text: "Cancel"; height: 56; font.pixelSize: 19; onClicked: mechanismPopup.close() }
+        }
+    }
+
+    Popup {
+        id: checkPopup
+        objectName: "checkPopup"
+        parent: Overlay.overlay
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        padding: 20
+        width: 700
+        contentItem: Column {
+            spacing: 12
+            Label { text: "Reaction check"; font.pixelSize: 24; font.bold: true }
+            Repeater {
+                model: window.checkResults
+                delegate: Label {
+                    objectName: "checkResult"
+                    width: parent.width
+                    text: modelData.text
+                    font.pixelSize: 19
+                    font.bold: !modelData.balanced
+                    wrapMode: Text.WordWrap
+                }
+            }
+            Button { text: "Close"; height: 56; font.pixelSize: 19; onClicked: checkPopup.close() }
+        }
     }
 
     PropertiesPanel {
