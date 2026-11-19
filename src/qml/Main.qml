@@ -18,6 +18,7 @@ ApplicationWindow {
     property bool gridSnapEnabled: false
     property var moleculeProperties: ({})
     property string reactionLabel: "conditions"
+    property string arrowKind: "forward"
     // Read by main.cpp: while a dialog covers the canvas, a finger may use it.
     readonly property bool dialogOpen: openDialog.visible || discardDialog.visible
 
@@ -120,13 +121,53 @@ ApplicationWindow {
                     }
                     Item { Layout.fillWidth: true }
                 }
+                // Arrow kinds: choosing one switches to the Arrow tool.
+                Flow {
+                    objectName: "arrowKindRow"
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Label { text: "Arrows"; font.pixelSize: 19; font.bold: true; height: 52; verticalAlignment: Text.AlignVCenter }
+                    Repeater {
+                        model: [{kind: "forward", icon: "akForward", tip: "Forward"},
+                                {kind: "equilibrium", icon: "akEquilibrium", tip: "Equilibrium"},
+                                {kind: "retro", icon: "akRetro", tip: "Retrosynthesis"},
+                                {kind: "resonance", icon: "akResonance", tip: "Resonance"},
+                                {kind: "dashed", icon: "akDashed", tip: "Dashed"},
+                                {kind: "noreaction", icon: "akNoReaction", tip: "No reaction"},
+                                {kind: "curved", icon: "akCurved", tip: "Curved (electron pair)"},
+                                {kind: "fishhook", icon: "akFishhook", tip: "Fishhook (single electron)"}]
+                        delegate: Button {
+                            objectName: "arrowKind_" + modelData.kind
+                            width: 64
+                            height: 52
+                            checkable: true
+                            checked: window.activeTool === "arrow" && window.arrowKind === modelData.kind
+                            Accessible.name: modelData.tip
+                            onClicked: { window.arrowKind = modelData.kind; window.activeTool = "arrow" }
+                            background: Rectangle {
+                                radius: 8
+                                color: parent.checked ? "#171717" : (parent.down ? "#d6d2c5" : "#ffffff")
+                                border.color: "#171717"
+                                border.width: 2
+                            }
+                            contentItem: Item {
+                                ToolbarIcon {
+                                    anchors.centerIn: parent
+                                    scale: 0.9
+                                    name: modelData.icon
+                                    ink: parent.parent.checked ? "#ffffff" : "#111111"
+                                }
+                            }
+                        }
+                    }
+                }
                 // Tap-only label choices, since the tablet build has no on-screen keyboard.
                 Flow {
                     Layout.fillWidth: true
                     spacing: 8
                     Label { text: "Labels"; font.pixelSize: 19; font.bold: true; height: 52; verticalAlignment: Text.AlignVCenter }
                     Repeater {
-                        model: ["Δ", "hν", "rt", "0 °C", "reflux", "H₂O", "H₃O⁺", "NaOH", "HCl", "H₂, Pd/C",
+                        model: ["+", "1", "2", "3", "Δ", "hν", "rt", "0 °C", "reflux", "H₂O", "H₃O⁺", "NaOH", "HCl", "H₂, Pd/C",
                                 "NaBH₄", "LiAlH₄", "THF", "EtOH", "cat."]
                         delegate: Button {
                             text: modelData
@@ -149,6 +190,7 @@ ApplicationWindow {
                     ringTemplate: window.activeRing
                     selectedAtom: window.selectedAtom
                     labelText: window.reactionLabel
+                    arrowKind: window.arrowKind
                     gridSnapEnabled: window.gridSnapEnabled
                     onSelectedAtomChangedByCanvas: function(atomId) { window.selectedAtom = atomId }
                     onStatus: function(text) { statusLine.text = text }

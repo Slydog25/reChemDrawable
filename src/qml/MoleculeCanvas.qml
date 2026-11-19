@@ -24,6 +24,10 @@ Rectangle {
     property real bondPreviewX: 0
     property real bondPreviewY: 0
     property string labelText: "conditions"
+    // forward, equilibrium, retro, resonance, dashed, noreaction, curved, fishhook
+    property string arrowKind: "forward"
+    // Pen path of an arrow drag in progress, in model coordinates.
+    property var arrowPreviewPath: []
     signal selectedAtomChangedByCanvas(int atomId)
     signal status(string text)
 
@@ -44,6 +48,58 @@ Rectangle {
         if (kept.length !== selectedAtoms.length) selectedAtoms = kept
         if (selectedAtom >= 0 && !present[selectedAtom]) selectedAtomChangedByCanvas(-1)
         drawing.requestPaint()
+    }
+
+    // Draws one reaction arrow; the SVG writer mirrors these shapes.
+    function paintArrow(ctx, item) {
+        const dx = item.x2 - item.x1, dy = item.y2 - item.y1
+        const length = Math.sqrt(dx * dx + dy * dy)
+        if (length < 0.01) return
+        const ux = dx / length, uy = dy / length, nx = -uy, ny = ux
+        const kind = item.kind || "forward"
+        const seg = function(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke() }
+        // side 0: both barbs; +1 / -1: only the barb on that side (half head).
+        const head = function(tx, ty, hx, hy, side, size, spread) {
+            const sz = size || 13, sp = spread || 7
+            const bx = -hy, by = hx
+            ctx.beginPath()
+            if (side >= 0) { ctx.moveTo(tx - hx * sz + bx * sp, ty - hy * sz + by * sp); ctx.lineTo(tx, ty) }
+            else ctx.moveTo(tx, ty)
+            if (side <= 0) ctx.lineTo(tx - hx * sz - bx * sp, ty - hy * sz - by * sp)
+            ctx.stroke()
+        }
+        if (kind === "curved" || kind === "fishhook") {
+            const cx = item.cx, cy = item.cy
+            let tx = item.x2 - cx, ty = item.y2 - cy
+            const tl = Math.sqrt(tx * tx + ty * ty)
+            if (tl < 0.01) { tx = ux; ty = uy } else { tx /= tl; ty /= tl }
+            ctx.beginPath(); ctx.moveTo(item.x1, item.y1); ctx.quadraticCurveTo(cx, cy, item.x2, item.y2); ctx.stroke()
+            head(item.x2, item.y2, tx, ty, kind === "fishhook" ? 1 : 0)
+        } else if (kind === "equilibrium") {
+            seg(item.x1 + nx * 4, item.y1 + ny * 4, item.x2 + nx * 4, item.y2 + ny * 4)
+            head(item.x2 + nx * 4, item.y2 + ny * 4, ux, uy, 1)
+            seg(item.x2 - nx * 4, item.y2 - ny * 4, item.x1 - nx * 4, item.y1 - ny * 4)
+            head(item.x1 - nx * 4, item.y1 - ny * 4, -ux, -uy, 1)
+        } else if (kind === "retro") {
+            const back = Math.min(length * 0.5, 14)
+            seg(item.x1 + nx * 4, item.y1 + ny * 4, item.x2 - ux * back + nx * 4, item.y2 - uy * back + ny * 4)
+            seg(item.x1 - nx * 4, item.y1 - ny * 4, item.x2 - ux * back - nx * 4, item.y2 - uy * back - ny * 4)
+            head(item.x2, item.y2, ux, uy, 0, 16, 11)
+        } else if (kind === "resonance") {
+            seg(item.x1, item.y1, item.x2, item.y2)
+            head(item.x2, item.y2, ux, uy, 0)
+            head(item.x1, item.y1, -ux, -uy, 0)
+        } else {
+            if (kind === "dashed") ctx.setLineDash([9, 6])
+            seg(item.x1, item.y1, item.x2, item.y2)
+            ctx.setLineDash([])
+            head(item.x2, item.y2, ux, uy, 0)
+            if (kind === "noreaction") {
+                const mx = (item.x1 + item.x2) / 2, my = (item.y1 + item.y2) / 2
+                seg(mx - (ux + nx) * 9, my - (uy + ny) * 9, mx + (ux + nx) * 9, my + (uy + ny) * 9)
+                seg(mx - (ux - nx) * 9, my - (uy - ny) * 9, mx + (ux - nx) * 9, my + (uy - ny) * 9)
+            }
+        }
     }
 
     // A half-placed arrow should not survive switching to another tool.
@@ -150,6 +206,9 @@ Rectangle {
         for (let i = 0; i < reactionItems.length; ++i) {
             include(reactionItems[i].x1, reactionItems[i].y1)
             include(reactionItems[i].x2, reactionItems[i].y2)
+            if (reactionItems[i].type === "arrow" && (reactionItems[i].kind === "curved" || reactionItems[i].kind === "fishhook"))
+                include((reactionItems[i].x1 + 2 * reactionItems[i].cx + reactionItems[i].x2) / 4,
+                        (reactionItems[i].y1 + 2 * reactionItems[i].cy + reactionItems[i].y2) / 4)
         }
         if (minX === Infinity) {
             zoom = 1; panX = 0; panY = 0
@@ -278,20 +337,20 @@ Rectangle {
             for (let i = 0; i < reactionItems.length; ++i) {
                 const item = reactionItems[i]
                 if (item.type === "arrow") {
-                    const dx = item.x2 - item.x1, dy = item.y2 - item.y1
-                    const length = Math.sqrt(dx * dx + dy * dy)
-                    if (length < 0.01) continue
-                    const ux = dx / length, uy = dy / length, nx = -uy, ny = ux
-                    ctx.beginPath(); ctx.moveTo(item.x1, item.y1); ctx.lineTo(item.x2, item.y2); ctx.stroke()
-                    ctx.beginPath()
-                    ctx.moveTo(item.x2 - ux * 13 + nx * 7, item.y2 - uy * 13 + ny * 7)
-                    ctx.lineTo(item.x2, item.y2)
-                    ctx.lineTo(item.x2 - ux * 13 - nx * 7, item.y2 - uy * 13 - ny * 7)
-                    ctx.stroke()
+                    root.paintArrow(ctx, item)
                 } else if (item.type === "label") {
-                    ctx.font = "18px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
+                    ctx.font = (item.bold ? "bold " : "") + "18px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
                     ctx.fillText(item.text, item.x1, item.y1)
                 }
+            }
+            if (arrowPreviewPath.length > 1) {
+                // Live ink of the arrow being dragged.
+                ctx.lineWidth = 2 / root.zoom
+                ctx.beginPath()
+                ctx.moveTo(arrowPreviewPath[0].x, arrowPreviewPath[0].y)
+                for (let i = 1; i < arrowPreviewPath.length; ++i) ctx.lineTo(arrowPreviewPath[i].x, arrowPreviewPath[i].y)
+                ctx.stroke()
+                ctx.lineWidth = 3
             }
             for (let i = 0; i < bondItems.length; ++i) {
                 const bond = bondItems[i]
@@ -424,6 +483,8 @@ Rectangle {
         property bool skipNextClick: false
         property real arrowStartX: 0
         property real arrowStartY: 0
+        property var arrowPath: []
+        property bool arrowDragging: false
         onPressed: function(mouse) {
             const point = root.modelPoint(mouse.x, mouse.y)
             dragStartX = mouse.x; dragStartY = mouse.y
@@ -438,6 +499,11 @@ Rectangle {
             if (activeTool === "draw") {
                 drawStartAtom = molecule.atomAt(point.x, point.y, 22 / root.zoom)
                 drawDragged = false
+                skipNextClick = false
+            }
+            if (activeTool === "arrow" && !awaitingArrowEnd) {
+                arrowPath = [{x: point.x, y: point.y}]
+                arrowDragging = false
                 skipNextClick = false
             }
             if (activeTool === "select") {
@@ -479,6 +545,15 @@ Rectangle {
                     root.bondPreviewAtom = drawStartAtom
                     root.bondPreviewX = point.x
                     root.bondPreviewY = point.y
+                    drawing.requestPaint()
+                }
+            }
+            if (pressed && activeTool === "arrow" && arrowPath.length > 0) {
+                const point = root.modelPoint(mouse.x, mouse.y)
+                if (Math.abs(mouse.x - dragStartX) > 12 || Math.abs(mouse.y - dragStartY) > 12) arrowDragging = true
+                if (arrowDragging) {
+                    arrowPath.push({x: point.x, y: point.y})
+                    root.arrowPreviewPath = arrowPath
                     drawing.requestPaint()
                 }
             }
@@ -526,6 +601,19 @@ Rectangle {
                 root.selectedAtomChangedByCanvas(-1)
                 skipNextClick = true
             }
+            if (activeTool === "arrow" && arrowDragging) {
+                // Press-drag-release draws the arrow in one undo step; a short press
+                // falls through to the tap-start / tap-end flow in onClicked.
+                const point = root.modelPoint(mouse.x, mouse.y)
+                const path = arrowPath.slice()
+                path.push({x: point.x, y: point.y})
+                if (reactionLayer.addArrowFromPath(root.arrowKind, path) >= 0) status("Reaction arrow added.")
+                else status("Reaction arrows need a longer stroke.")
+                skipNextClick = true
+            }
+            arrowPath = []
+            arrowDragging = false
+            root.arrowPreviewPath = []
             root.bondPreviewVisible = false
             root.bondPreviewAtom = -1
             drawing.requestPaint()
@@ -591,14 +679,14 @@ Rectangle {
                     arrowStartX = point.x; arrowStartY = point.y; awaitingArrowEnd = true
                     status("Arrow start set; tap its endpoint.")
                 } else {
-                    if (reactionLayer.addArrow(arrowStartX, arrowStartY, point.x, point.y) >= 0) status("Reaction arrow added.")
+                    if (reactionLayer.addArrowKind(root.arrowKind, arrowStartX, arrowStartY, point.x, point.y) >= 0) status("Reaction arrow added.")
                     else status("Reaction arrows need a longer stroke.")
                     awaitingArrowEnd = false
                 }
                 return
             }
             if (activeTool === "label") {
-                if (reactionLayer.addLabel(root.labelText, point.x, point.y) >= 0) status("Text label added.")
+                if (reactionLayer.addLabelSnapped(root.labelText, point.x, point.y, 40 / root.zoom) >= 0) status("Text label added.")
                 else status("Enter label text before placing it.")
                 return
             }

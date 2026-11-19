@@ -11,6 +11,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLineF>
+#include <QRegularExpression>
+#include <QStringList>
+#include <cmath>
 
 namespace {
 double segmentDistance(const QPointF &point, const QPointF &start, const QPointF &end) {
@@ -20,6 +23,63 @@ double segmentDistance(const QPointF &point, const QPointF &start, const QPointF
     const double fraction = qBound(0.0, QPointF::dotProduct(point - start, end - start) / lengthSquared, 1.0);
     return QLineF(point, start + (end - start) * fraction).length();
 }
+
+QPointF quadPoint(const QPointF &a, const QPointF &c, const QPointF &b, double t) {
+    const double u = 1.0 - t;
+    return a * (u * u) + c * (2 * u * t) + b * (t * t);
+}
+
+// Distance from a point to the quadratic curve a -> c -> b (polyline approximation).
+double curveDistance(const QPointF &point, const QPointF &a, const QPointF &c, const QPointF &b) {
+    constexpr int segments = 32;
+    double best = 1e18;
+    QPointF previous = a;
+    for (int i = 1; i <= segments; ++i) {
+        const QPointF next = quadPoint(a, c, b, double(i) / segments);
+        best = qMin(best, segmentDistance(point, previous, next));
+        previous = next;
+    }
+    return best;
+}
+
+QPointF pathPoint(const QVariant &value) {
+    if (value.typeId() == QMetaType::QPointF) return value.toPointF();
+    const QVariantMap map = value.toMap();
+    return QPointF(map.value(QStringLiteral("x")).toDouble(), map.value(QStringLiteral("y")).toDouble());
+}
+}
+
+bool ReactionLayer::isCurvedKind(const QString &kind) {
+    return kind == QStringLiteral("curved") || kind == QStringLiteral("fishhook");
+}
+
+QString ReactionLayer::normalizedKind(const QString &kind) {
+    static const QStringList known{QStringLiteral("forward"), QStringLiteral("equilibrium"), QStringLiteral("retro"),
+                                   QStringLiteral("resonance"), QStringLiteral("dashed"), QStringLiteral("noreaction"),
+                                   QStringLiteral("curved"), QStringLiteral("fishhook")};
+    return known.contains(kind) ? kind : QStringLiteral("forward");
+}
+
+bool ReactionLayer::isCompoundNumber(const QString &text) {
+    static const QRegularExpression pattern(QStringLiteral("^[0-9]+[a-z]?$"));
+    return pattern.match(text.trimmed()).hasMatch();
+}
+
+QVariantMap ReactionLayer::controlFromPath(const QVariantList &path) {
+    if (path.size() < 2) return {};
+    const QPointF start = pathPoint(path.first()), end = pathPoint(path.last());
+    const QPointF mid = (start + end) / 2.0;
+    const QLineF chord(start, end);
+    if (chord.length() < 0.01) return QVariantMap{{QStringLiteral("x"), mid.x()}, {QStringLiteral("y"), mid.y()}};
+    const QPointF normal(-chord.dy() / chord.length(), chord.dx() / chord.length());
+    double bestOffset = 0.0;
+    for (const QVariant &value : path) {
+        const double offset = QPointF::dotProduct(pathPoint(value) - start, normal);
+        if (qAbs(offset) > qAbs(bestOffset)) bestOffset = offset;
+    }
+    // A quadratic curve peaks at half its control point's offset from the chord.
+    const QPointF control = mid + normal * (2.0 * bestOffset);
+    return QVariantMap{{QStringLiteral("x"), control.x()}, {QStringLiteral("y"), control.y()}};
 }
 
 ReactionLayer::ReactionLayer(Molecule *molecule, QObject *parent) : QObject(parent), m_molecule(molecule) {}
@@ -30,7 +90,9 @@ QVariantList ReactionLayer::items() const {
         result.append(QVariantMap{{QStringLiteral("id"), item.id}, {QStringLiteral("type"), item.type},
                                   {QStringLiteral("x1"), item.x1}, {QStringLiteral("y1"), item.y1},
                                   {QStringLiteral("x2"), item.x2}, {QStringLiteral("y2"), item.y2},
-                                  {QStringLiteral("text"), item.text}});
+                                  {QStringLiteral("text"), item.text},
+                                  {QStringLiteral("kind"), item.kind}, {QStringLiteral("cx"), item.cx}, {QStringLiteral("cy"), item.cy},
+                                  {QStringLiteral("bold"), item.type == QStringLiteral("label") && isCompoundNumber(item.text)}});
     }
     return result;
 }
@@ -39,9 +101,75 @@ int ReactionLayer::addArrow(double startX, double startY, double endX, double en
     if (QLineF(QPointF(startX, startY), QPointF(endX, endY)).length() < 12.0) return -1;
     const Snapshot before = snapshot();
     const int id = m_nextId++;
-    m_items.append({id, QStringLiteral("arrow"), startX, startY, endX, endY, {}});
+    Item item{id, QStringLiteral("arrow"), startX, startY, endX, endY, {}};
+    item.cx = (startX + endX) / 2.0; item.cy = (startY + endY) / 2.0;
+    m_items.append(item);
     commit(before);
     return id;
+}
+
+int ReactionLayer::addArrowKind(const QString &kindName, double startX, double startY, double endX, double endY,
+                                double controlX, double controlY) {
+    const QLineF chord(QPointF(startX, startY), QPointF(endX, endY));
+    if (chord.length() < 12.0) return -1;
+    const QString kind = normalizedKind(kindName);
+    const Snapshot before = snapshot();
+    const int id = m_nextId++;
+    Item item{id, QStringLiteral("arrow"), startX, startY, endX, endY, {}};
+    item.kind = kind;
+    item.cx = (startX + endX) / 2.0; item.cy = (startY + endY) / 2.0;
+    if (isCurvedKind(kind)) {
+        if (std::isnan(controlX) || std::isnan(controlY)) {
+            // Default bulge to the left of the direction of travel.
+            item.cx += chord.dy() * 0.35; item.cy -= chord.dx() * 0.35;
+        } else {
+            item.cx = controlX; item.cy = controlY;
+        }
+    }
+    m_items.append(item);
+    commit(before);
+    return id;
+}
+
+int ReactionLayer::addArrowFromPath(const QString &kind, const QVariantList &path) {
+    if (path.size() < 2) return -1;
+    const QPointF start = pathPoint(path.first()), end = pathPoint(path.last());
+    if (!isCurvedKind(normalizedKind(kind))) return addArrowKind(kind, start.x(), start.y(), end.x(), end.y());
+    const QVariantMap control = controlFromPath(path);
+    // Nearly straight drag: keep the default bulge so the kind is still recognisable.
+    const QPointF mid = (start + end) / 2.0;
+    const QPointF c(control.value(QStringLiteral("x")).toDouble(), control.value(QStringLiteral("y")).toDouble());
+    if (QLineF(mid, c).length() < 6.0)
+        return addArrowKind(kind, start.x(), start.y(), end.x(), end.y());
+    return addArrowKind(kind, start.x(), start.y(), end.x(), end.y(), c.x(), c.y());
+}
+
+QVariantMap ReactionLayer::snapLabelPosition(double x, double y, double tolerance) const {
+    const QPointF tap(x, y);
+    const Item *best = nullptr;
+    double bestDistance = tolerance;
+    for (const Item &item : m_items) {
+        if (item.type != QStringLiteral("arrow") || isCurvedKind(item.kind)) continue;
+        const double distance = segmentDistance(tap, QPointF(item.x1, item.y1), QPointF(item.x2, item.y2));
+        if (distance <= bestDistance) { best = &item; bestDistance = distance; }
+    }
+    if (!best) return {};
+    const QPointF start(best->x1, best->y1), end(best->x2, best->y2);
+    const QLineF chord(start, end);
+    const QPointF mid = (start + end) / 2.0;
+    QPointF normal(chord.dy() / chord.length(), -chord.dx() / chord.length());
+    // Choose the side the tap is on; on the line itself, prefer above (smaller y).
+    const double side = QPointF::dotProduct(tap - mid, normal);
+    if (qAbs(side) > 0.5 ? side < 0 : normal.y() > 0) normal = -normal;
+    constexpr double offset = 22.0;
+    const QPointF where = mid + normal * offset;
+    return QVariantMap{{QStringLiteral("x"), where.x()}, {QStringLiteral("y"), where.y()}, {QStringLiteral("arrow"), best->id}};
+}
+
+int ReactionLayer::addLabelSnapped(const QString &text, double x, double y, double tolerance) {
+    const QVariantMap snapped = snapLabelPosition(x, y, tolerance);
+    if (snapped.isEmpty()) return addLabel(text, x, y);
+    return addLabel(text, snapped.value(QStringLiteral("x")).toDouble(), snapped.value(QStringLiteral("y")).toDouble());
 }
 
 int ReactionLayer::addLabel(const QString &text, double x, double y) {
@@ -57,8 +185,12 @@ int ReactionLayer::addLabel(const QString &text, double x, double y) {
 int ReactionLayer::itemAt(double x, double y, double tolerance) const {
     const QPointF point(x, y);
     for (auto iterator = m_items.crbegin(); iterator != m_items.crend(); ++iterator) {
-        if (iterator->type == QStringLiteral("arrow") && segmentDistance(point, QPointF(iterator->x1, iterator->y1), QPointF(iterator->x2, iterator->y2)) <= tolerance)
-            return iterator->id;
+        if (iterator->type == QStringLiteral("arrow")) {
+            const QPointF a(iterator->x1, iterator->y1), b(iterator->x2, iterator->y2);
+            const double distance = isCurvedKind(iterator->kind) ? curveDistance(point, a, QPointF(iterator->cx, iterator->cy), b)
+                                                                 : segmentDistance(point, a, b);
+            if (distance <= tolerance) return iterator->id;
+        }
         if (iterator->type == QStringLiteral("label")) {
             const double halfWidth = qMax(24.0, iterator->text.size() * 5.5);
             if (qAbs(x - iterator->x1) <= halfWidth && qAbs(y - iterator->y1) <= tolerance) return iterator->id;
@@ -72,7 +204,7 @@ bool ReactionLayer::translateItem(int itemId, double dx, double dy) {
     for (Item &item : m_items) {
         if (item.id != itemId) continue;
         const Snapshot before = snapshot();
-        item.x1 += dx; item.y1 += dy; item.x2 += dx; item.y2 += dy;
+        item.x1 += dx; item.y1 += dy; item.x2 += dx; item.y2 += dy; item.cx += dx; item.cy += dy;
         commit(before);
         return true;
     }
@@ -99,6 +231,10 @@ bool ReactionLayer::saveToFile(const QString &path) {
                            {QStringLiteral("x1"), item.x1}, {QStringLiteral("y1"), item.y1},
                            {QStringLiteral("x2"), item.x2}, {QStringLiteral("y2"), item.y2}};
         if (item.type == QStringLiteral("label")) object.insert(QStringLiteral("text"), item.text);
+        if (item.type == QStringLiteral("arrow")) {
+            object.insert(QStringLiteral("kind"), item.kind);
+            if (isCurvedKind(item.kind)) { object.insert(QStringLiteral("cx"), item.cx); object.insert(QStringLiteral("cy"), item.cy); }
+        }
         annotations.append(object);
     }
     const QJsonObject document{{QStringLiteral("format"), QStringLiteral("reChemDrawable reaction scheme")},
@@ -133,8 +269,12 @@ bool ReactionLayer::loadFromFile(const QString &path) {
         const QString type = object.value(QStringLiteral("type")).toString();
         if ((type != QStringLiteral("arrow") && type != QStringLiteral("label")) || !object.contains(QStringLiteral("x1")) || !object.contains(QStringLiteral("y1"))) continue;
         const int id = object.value(QStringLiteral("id")).toInt(nextId);
-        annotations.append({id, type, object.value(QStringLiteral("x1")).toDouble(), object.value(QStringLiteral("y1")).toDouble(),
-                            object.value(QStringLiteral("x2")).toDouble(), object.value(QStringLiteral("y2")).toDouble(), object.value(QStringLiteral("text")).toString()});
+        Item item{id, type, object.value(QStringLiteral("x1")).toDouble(), object.value(QStringLiteral("y1")).toDouble(),
+                  object.value(QStringLiteral("x2")).toDouble(), object.value(QStringLiteral("y2")).toDouble(), object.value(QStringLiteral("text")).toString()};
+        item.kind = type == QStringLiteral("arrow") ? normalizedKind(object.value(QStringLiteral("kind")).toString()) : QStringLiteral("forward");
+        item.cx = object.value(QStringLiteral("cx")).toDouble((item.x1 + item.x2) / 2.0);
+        item.cy = object.value(QStringLiteral("cy")).toDouble((item.y1 + item.y2) / 2.0);
+        annotations.append(item);
         nextId = qMax(nextId, id + 1);
     }
     m_molecule->replaceContent(parsed.atomData(), parsed.bondData());

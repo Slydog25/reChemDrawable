@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QVector>
 #include <QVariantList>
+#include <QVariantMap>
+#include <QtNumeric>
 
 class Molecule;
 
@@ -14,7 +16,26 @@ public:
 
     Q_INVOKABLE QVariantList items() const;
     Q_INVOKABLE int addArrow(double startX, double startY, double endX, double endY);
+    // Adds an arrow of the given kind (forward, equilibrium, retro, resonance, dashed,
+    // noreaction, curved, fishhook). Curved kinds bend through control point (cx, cy);
+    // pass NaN to use a default bulge.
+    Q_INVOKABLE int addArrowKind(const QString &kind, double startX, double startY, double endX, double endY,
+                                 double controlX = qQNaN(), double controlY = qQNaN());
+    // Adds an arrow from a pen drag path (list of {x,y} maps or QPointF). The first and
+    // last points are the ends; curved kinds take their bend from the path.
+    Q_INVOKABLE int addArrowFromPath(const QString &kind, const QVariantList &path);
+    // Quadratic control point for a pen path: the path point farthest from the
+    // start-end chord, converted so the curve passes through it. Returns {x, y}.
+    Q_INVOKABLE static QVariantMap controlFromPath(const QVariantList &path);
+    Q_INVOKABLE static bool isCurvedKind(const QString &kind);
+    Q_INVOKABLE static QString normalizedKind(const QString &kind);
+    // Compound numbers ("1", "2a") are drawn bold.
+    Q_INVOKABLE static bool isCompoundNumber(const QString &text);
     Q_INVOKABLE int addLabel(const QString &text, double x, double y);
+    // Like addLabel, but a tap within `tolerance` of a straight arrow snaps the label
+    // centred above (or below, following the tap) the arrow's midpoint.
+    Q_INVOKABLE int addLabelSnapped(const QString &text, double x, double y, double tolerance = 40.0);
+    Q_INVOKABLE QVariantMap snapLabelPosition(double x, double y, double tolerance = 40.0) const;
     Q_INVOKABLE int itemAt(double x, double y, double tolerance = 16.0) const;
     Q_INVOKABLE bool translateItem(int itemId, double dx, double dy);
     Q_INVOKABLE bool removeItem(int itemId);
@@ -46,6 +67,9 @@ private:
         double x2 = 0.0;
         double y2 = 0.0;
         QString text;
+        QString kind = QStringLiteral("forward");
+        double cx = 0.0;
+        double cy = 0.0;
     };
     struct Snapshot {
         QVector<Item> items;
