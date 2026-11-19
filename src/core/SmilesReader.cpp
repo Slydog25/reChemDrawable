@@ -2,6 +2,7 @@
 
 #include "Elements.h"
 #include "Layout2D.h"
+#include "Stereo.h"
 
 #include <QHash>
 #include <QRegularExpression>
@@ -22,6 +23,9 @@ struct PAtom {
     int isotope = 0;
     int charge = 0;
     int hCount = 0;
+    int chirality = 0;       // 1 = @ (anticlockwise), 2 = @@ (clockwise)
+    bool fromChain = false;  // first neighbour is the atom written just before it
+    QVector<int> nbrs;       // neighbours in written order; -1 = ring bond not closed yet
 };
 
 struct PBond {
@@ -30,6 +34,7 @@ struct PBond {
     Sym sym = Sym::None;
     int order = 1;
     bool aromatic = false;
+    int dir = 0;             // '/' = +1, backslash = -1, read from atom a to atom b
 };
 
 struct ParseError {
@@ -62,8 +67,9 @@ public:
         int previous = -1;
         QVector<int> branchStack;
         Sym pending = Sym::None;
+        int pendingDir = 0;
         int pendingPos = 0;
-        struct Open { int atom; Sym sym; int pos; };
+        struct Open { int atom; Sym sym; int pos; int dir; int slot; };
         QHash<int, Open> open;
         bool justOpened = false;
         bool componentHasAtom = false;
@@ -78,6 +84,7 @@ public:
                 if (pending != Sym::None) throw ParseError{i, QStringLiteral("two bond symbols in a row")};
                 if (previous < 0) throw ParseError{i, QStringLiteral("bond symbol with no atom before it")};
                 pending = ch == '=' ? Sym::Double : ch == '#' ? Sym::Triple : ch == ':' ? Sym::Aromatic : Sym::Single;
+                pendingDir = ch == '/' ? 1 : ch == '\\' ? -1 : 0;
                 pendingPos = i;
                 ++i;
             } else if (ch == '(') {
@@ -121,16 +128,29 @@ public:
                     if (sym == Sym::None) sym = o.sym;
                     if (o.atom == previous) throw ParseError{start, QStringLiteral("ring closure %1 joins an atom to itself").arg(number)};
                     addBond(o.atom, previous, sym, start);
+                    // Direction is stored as read from the opening atom.
+                    m_bonds.last().dir = o.dir != 0 ? o.dir : -pendingDir;
+                    m_atoms[o.atom].nbrs[o.slot] = previous;
+                    m_atoms[previous].nbrs.append(o.atom);
                 } else {
-                    open.insert(number, {previous, pending, start});
+                    open.insert(number, {previous, pending, start, pendingDir, int(m_atoms[previous].nbrs.size())});
+                    m_atoms[previous].nbrs.append(-1);
                 }
                 pending = Sym::None;
+                pendingDir = 0;
             } else {
                 const int start = i;
                 const int atom = readAtom(i);
                 componentHasAtom = true;
-                if (previous >= 0) addBond(previous, atom, pending, pending != Sym::None ? pendingPos : start);
+                if (previous >= 0) {
+                    addBond(previous, atom, pending, pending != Sym::None ? pendingPos : start);
+                    m_bonds.last().dir = pendingDir;
+                    m_atoms[previous].nbrs.append(atom);
+                    m_atoms[atom].nbrs.append(previous);
+                    m_atoms[atom].fromChain = true;
+                }
                 pending = Sym::None;
+                pendingDir = 0;
                 previous = atom;
             }
         }
@@ -190,12 +210,19 @@ private:
                 atom.aromatic = true;
                 atom.element = symbol.left(1).toUpper() + symbol.mid(1);
             }
-            // Chirality (@, @@, @TH1 ...) is accepted and ignored.
+            // Tetrahedral chirality: @, @@, @TH1, @TH2. Other classes (@SP ...) are ignored.
             if (i < n && m_text[i] == '@') {
-                while (i < n && m_text[i] == '@') ++i;
-                if (i + 2 < n && m_text[i].isUpper() && m_text[i + 1].isUpper() && m_text[i + 2].isDigit()) {
+                int count = 0;
+                while (i < n && m_text[i] == '@') { ++count; ++i; }
+                atom.chirality = count == 1 ? 1 : 2;
+                if (count == 1 && i + 2 < n && m_text[i].isUpper() && m_text[i + 1].isUpper() && m_text[i + 2].isDigit()) {
+                    const bool th = m_text[i] == 'T' && m_text[i + 1] == 'H';
+                    const int digit = m_text[i + 2].digitValue();
+                    atom.chirality = th && (digit == 1 || digit == 2) ? digit : 0;
                     i += 2;
                     while (i < n && m_text[i].isDigit()) ++i;
+                } else if (count > 2) {
+                    atom.chirality = 0;
                 }
             }
             if (i < n && m_text[i] == 'H') {
@@ -448,9 +475,163 @@ Result parse(const QString &smiles) {
             result.warnings.append(QStringLiteral("%1 has fewer hydrogens in the SMILES than the editor's valence rules give; the editor's count is used.").arg(patoms[i].element));
         }
     }
+    // Stereo: neighbour order of every @/@@ centre (the implicit hydrogen follows
+    // the atom written before it, or comes first when there is none) and the
+    // direction of every slash bond.
+    for (int i = 0; i < n; ++i) {
+        const PAtom &atom = patoms[i];
+        if (!atom.chirality || atom.hCount > 1) continue;
+        QVector<int> order = atom.nbrs;
+        if (atom.hCount == 1) order.insert(atom.fromChain ? 1 : 0, -1);
+        if (order.size() != 4) continue;
+        Chirality centre;
+        centre.atom = i;
+        centre.clockwise = atom.chirality == 2;
+        centre.order = order;
+        result.centers.append(centre);
+    }
+    for (int e = 0; e < pbonds.size(); ++e) {
+        if (pbonds[e].dir == 0 || pbonds[e].order != 1 || pbonds[e].aromatic) continue;
+        result.directions.append({e, pbonds[e].a, pbonds[e].b, pbonds[e].dir > 0});
+    }
     result.ok = true;
     return result;
 }
+
+namespace {
+
+QPointF pointOf(const QVector<QPointF> &points, int i) { return points[i]; }
+
+// Atoms reachable from `start` without using bond `skip` (a bond index into `bonds`).
+QVector<int> sideOf(int atomCount, const QVector<Bond> &bonds, int start, int skip) {
+    QVector<QVector<int>> adjacency(atomCount);
+    for (int e = 0; e < bonds.size(); ++e) {
+        if (e == skip) continue;
+        adjacency[bonds[e].atomA - 1].append(bonds[e].atomB - 1);
+        adjacency[bonds[e].atomB - 1].append(bonds[e].atomA - 1);
+    }
+    QVector<char> seen(atomCount, 0);
+    QVector<int> queue{start};
+    seen[start] = 1;
+    for (int head = 0; head < queue.size(); ++head)
+        for (const int next : adjacency[queue[head]])
+            if (!seen[next]) { seen[next] = 1; queue.append(next); }
+    return queue;
+}
+
+// Which side of the directed line a->b the point p is on (+1 / -1, 0 on the line).
+int sideOfLine(const QPointF &a, const QPointF &b, const QPointF &p) {
+    const double cross = (b.x() - a.x()) * (p.y() - a.y()) - (b.y() - a.y()) * (p.x() - a.x());
+    return cross > 1.0 ? 1 : cross < -1.0 ? -1 : 0;
+}
+
+// Makes every acyclic double bond that has slash bonds on both ends cis or trans
+// as written, by mirroring the part of the molecule beyond its second atom.
+void applyDoubleBondGeometry(const Result &result, QVector<QPointF> &points) {
+    const int n = result.atoms.size();
+    QVector<int> doubles;
+    for (int e = 0; e < result.bonds.size(); ++e)
+        if (result.bonds[e].order == 2 && result.bonds[e].style != QStringLiteral("aromatic")) doubles.append(e);
+    std::sort(doubles.begin(), doubles.end(), [&](int x, int y) {
+        return qMax(result.bonds[x].atomA, result.bonds[x].atomB) < qMax(result.bonds[y].atomA, result.bonds[y].atomB);
+    });
+    for (const int e : doubles) {
+        const int a = qMin(result.bonds[e].atomA, result.bonds[e].atomB) - 1;
+        const int b = qMax(result.bonds[e].atomA, result.bonds[e].atomB) - 1;
+        const QVector<int> beyond = sideOf(n, result.bonds, b, e);
+        if (beyond.contains(a)) continue; // ring double bond
+        // Find a directional single bond on each end (not the double bond itself).
+        int subA = -1, subB = -1;
+        bool upA = false, upB = false;
+        for (const BondDirection &d : result.directions) {
+            for (const int end : {a, b}) {
+                if (d.from != end && d.to != end) continue;
+                const int other = d.from == end ? d.to : d.from;
+                if (other == a || other == b) continue;
+                const bool up = d.from == end ? d.up : !d.up;
+                if (end == a && subA < 0) { subA = other; upA = up; }
+                if (end == b && subB < 0) { subB = other; upB = up; }
+            }
+        }
+        if (subA < 0 || subB < 0) continue;
+        const bool wantCis = upA == upB;
+        const int sideA = sideOfLine(pointOf(points, a), pointOf(points, b), pointOf(points, subA));
+        const int sideB = sideOfLine(pointOf(points, a), pointOf(points, b), pointOf(points, subB));
+        if (sideA == 0 || sideB == 0) continue;
+        if ((sideA == sideB) == wantCis) continue;
+        // Mirror everything beyond b across the line through a and b.
+        const QPointF origin = points[a];
+        QPointF axis = points[b] - points[a];
+        const double length = std::hypot(axis.x(), axis.y());
+        if (length < 1e-9) continue;
+        axis /= length;
+        for (const int atom : beyond) {
+            const QPointF v = points[atom] - origin;
+            const double along = v.x() * axis.x() + v.y() * axis.y();
+            const QPointF foot = origin + axis * along;
+            points[atom] = foot + (foot - points[atom]);
+        }
+    }
+}
+
+// Gives every @/@@ centre one wedge or dash bond that reproduces its handedness.
+void assignWedges(const Result &result, const QVector<QPointF> &points, QVector<Bond> &bonds) {
+    const int n = result.atoms.size();
+    QVector<char> isCentre(n, 0);
+    for (const Chirality &c : result.centers) isCentre[c.atom] = 1;
+    QVector<char> inRingBond(bonds.size(), 0);
+    for (int e = 0; e < bonds.size(); ++e)
+        inRingBond[e] = sideOf(n, bonds, bonds[e].atomA - 1, e).contains(bonds[e].atomB - 1);
+
+    for (const Chirality &c : result.centers) {
+        struct Candidate { int bond; int neighbour; int score; };
+        QVector<Candidate> candidates;
+        for (int e = 0; e < bonds.size(); ++e) {
+            const Bond &bond = bonds[e];
+            if (bond.order != 1 || bond.style != QStringLiteral("plain")) continue;
+            const int a = bond.atomA - 1, b = bond.atomB - 1;
+            if (a != c.atom && b != c.atom) continue;
+            const int other = a == c.atom ? b : a;
+            if (!c.order.contains(other)) continue;
+            int score = 0;
+            if (inRingBond[e]) score += 4;
+            if (isCentre[other]) score += 2;
+            // A bond to a bare terminal atom is the clearest place for a wedge.
+            int degree = 0;
+            for (const Bond &x : std::as_const(bonds)) if (x.atomA - 1 == other || x.atomB - 1 == other) ++degree;
+            if (degree > 1) score += 1;
+            candidates.append({e, other, score});
+        }
+        std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate &x, const Candidate &y) { return x.score < y.score; });
+        const int wanted = c.clockwise ? -1 : 1;
+        bool done = false;
+        for (const Candidate &cand : std::as_const(candidates)) {
+            for (const int z : {1, -1}) {
+                QVector<Stereo::Arm> arms;
+                for (const int nb : c.order) {
+                    Stereo::Arm arm;
+                    if (nb < 0) {
+                        arm.implicit = true;
+                    } else {
+                        arm.dx = points[nb].x() - points[c.atom].x();
+                        arm.dy = points[nb].y() - points[c.atom].y();
+                        if (nb == cand.neighbour) arm.z = z;
+                    }
+                    arms.append(arm);
+                }
+                if (Stereo::chiralParity(arms) != wanted) continue;
+                Bond &bond = bonds[cand.bond];
+                bond.style = z > 0 ? QStringLiteral("wedge") : QStringLiteral("dash");
+                if (bond.atomA - 1 != c.atom) qSwap(bond.atomA, bond.atomB);
+                done = true;
+                break;
+            }
+            if (done) break;
+        }
+    }
+}
+
+} // namespace
 
 bool build(const QString &smiles, double centerX, double centerY, QVector<Atom> &atoms,
            QVector<Bond> &bonds, QString *error, QStringList *warnings) {
@@ -462,7 +643,9 @@ bool build(const QString &smiles, double centerX, double centerY, QVector<Atom> 
     }
     QVector<Layout2D::Edge> edges;
     for (const Bond &bond : std::as_const(result.bonds)) edges.append({bond.atomA - 1, bond.atomB - 1, bond.order});
-    const QVector<QPointF> points = Layout2D::place(result.atoms.size(), edges);
+    QVector<QPointF> points = Layout2D::place(result.atoms.size(), edges);
+    applyDoubleBondGeometry(result, points);
+    assignWedges(result, points, result.bonds);
     double minX = 1e18, maxX = -1e18, minY = 1e18, maxY = -1e18;
     for (const QPointF &p : points) {
         minX = qMin(minX, p.x()); maxX = qMax(maxX, p.x());

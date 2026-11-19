@@ -123,6 +123,14 @@ Canvas {
             }
             ctx.lineWidth = 3
             break
+        case "invert": // two arcs swapping a wedge and a dash across a centre
+            arcArrow(22, 22, 16, Math.PI + 0.45, 2 * Math.PI - 0.45, false)
+            arcArrow(22, 22, 16, 0.45, Math.PI - 0.45, false)
+            solid([[21, 15], [14, 29], [21, 29]])
+            ctx.lineWidth = 2
+            line(24, 21, 24, 23); line(27, 19, 27, 25); line(30, 17, 30, 27)
+            ctx.lineWidth = 3
+            break
         case "ring": hexagon(22, 22, 16); break
         case "chain": // a chain being dragged out: zig-zag ending in a drag arrow, with a count
             path([[4, 34], [11, 26], [18, 34], [25, 26]], false)

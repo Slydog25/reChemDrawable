@@ -903,6 +903,12 @@ Rectangle {
                 else status("Tap a bond to cycle its style (double bonds: centred or offset to either side).")
                 return
             }
+            if (activeTool === "invert") {
+                // Tapping a stereocentre swaps its wedges and dashes; tapping a double bond flips E/Z.
+                if (hitAtom >= 0 || hitBond >= 0) molecule.invertStereoAt(point.x, point.y)
+                else status("Tap a stereocentre atom or a double bond to invert it.")
+                return
+            }
             if (activeTool === "select") {
                 if (hitAtom >= 0) {
                     if (mouse.modifiers & Qt.ControlModifier) root.toggleSelection(hitAtom)

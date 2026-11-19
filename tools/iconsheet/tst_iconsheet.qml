@@ -10,7 +10,7 @@ Rectangle {
     width: 8 * 120 + 20
     height: Math.ceil(names.length / 8) * 130 + 20
     color: "#f7f5ed"
-    property var names: ["draw", "select", "move", "pan", "bond", "style", "ring", "chain", "arrow", "text", "erase",
+    property var names: ["draw", "select", "move", "pan", "bond", "style", "invert", "ring", "chain", "arrow", "text", "erase",
                          "undo", "redo", "grid", "zoomIn", "zoomOut", "fit", "new", "load", "save", "mol",
                          "svg", "smiles", "export", "clean", "rotate", "flipH", "flipV", "alignH", "alignV", "copy",
                          "paste", "delete", "clear", "exit", "duplicate", "bold", "stereo",

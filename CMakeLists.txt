@@ -117,6 +117,7 @@ if(BUILD_TESTING)
     rechemdraw_add_test(export_tests tests/test_exports.cpp)     # PNG, PDF, CDXML, reMarkable library
     rechemdraw_add_test(smiles_import_tests tests/test_smiles_import.cpp)  # parser, 2D layout, .smi
     rechemdraw_add_test(properties_tests tests/test_properties.cpp)  # DoU, Lipinski, TPSA, isotope pattern
+    rechemdraw_add_test(stereo_smiles_tests tests/test_stereo_smiles.cpp)  # SMILES stereo, invert
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
     qt_add_executable(qml_tests tests/qml_tests.cpp)

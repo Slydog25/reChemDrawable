@@ -101,6 +101,16 @@ public:
     // Adds the structure for a SMILES string, centred at (x, y), as one undoable
     // step. On a parse error nothing changes and message() explains why.
     Q_INVOKABLE bool importSmiles(const QString &smiles, double x, double y);
+    // Inverts a stereocentre: swaps wedge and dash on every wedge/dash bond that
+    // starts at the atom. One undoable step; false (with a message) when there is none.
+    Q_INVOKABLE bool invertStereocentre(int atomId);
+    // Flips a double bond between E and Z by mirroring the smaller side of the
+    // molecule across the bond axis (wedges, dashes and double-bond sides in the
+    // mirrored part are swapped so its own centres keep their configuration).
+    // One undoable step; false (with a message) for ring double bonds.
+    Q_INVOKABLE bool invertDoubleBond(int bondId);
+    // Invert tool: a stereocentre atom or a double bond, whichever the id names.
+    Q_INVOKABLE bool invertStereoAt(double x, double y);
     Q_INVOKABLE bool canAddBond(int atomA, int atomB, int order = 1) const;
     Q_INVOKABLE QString formula() const;
     Q_INVOKABLE QString smiles() const;
