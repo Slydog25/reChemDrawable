@@ -38,10 +38,11 @@ void writeArrow(QTextStream &stream, const QVariantMap &item) {
         stream << "<path fill=\"none\" d=\"M" << x1 << ',' << y1 << " Q" << cx << ',' << cy << ' ' << x2 << ',' << y2 << "\"/>\n";
         writeHead(stream, x2, y2, tx, ty, kind == QStringLiteral("fishhook") ? 1 : 0);
     } else if (kind == QStringLiteral("equilibrium")) {
-        writeLine(stream, x1 + nx * 4, y1 + ny * 4, x2 + nx * 4, y2 + ny * 4);
-        writeHead(stream, x2 + nx * 4, y2 + ny * 4, ux, uy, 1);
-        writeLine(stream, x2 - nx * 4, y2 - ny * 4, x1 - nx * 4, y1 - ny * 4);
-        writeHead(stream, x1 - nx * 4, y1 - ny * 4, -ux, -uy, 1);
+        // Upper line forward, lower line back (y points down), barbs outside.
+        writeLine(stream, x1 - nx * 4, y1 - ny * 4, x2 - nx * 4, y2 - ny * 4);
+        writeHead(stream, x2 - nx * 4, y2 - ny * 4, ux, uy, -1);
+        writeLine(stream, x2 + nx * 4, y2 + ny * 4, x1 + nx * 4, y1 + ny * 4);
+        writeHead(stream, x1 + nx * 4, y1 + ny * 4, -ux, -uy, -1);
     } else if (kind == QStringLiteral("retro")) {
         const double back = qMin(length * 0.5, 14.0);
         writeLine(stream, x1 + nx * 4, y1 + ny * 4, x2 - ux * back + nx * 4, y2 - uy * back + ny * 4);

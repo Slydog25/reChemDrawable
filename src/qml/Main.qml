@@ -21,7 +21,7 @@ ApplicationWindow {
     property string reactionLabel: "conditions"
     property string arrowKind: "forward"
     // Read by main.cpp: while a dialog covers the canvas, a finger may use it.
-    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible
+    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || elementPalette.popupOpen
 
     Shortcut { sequences: [StandardKey.Undo]; onActivated: editHistory.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: editHistory.redo() }
@@ -103,6 +103,7 @@ ApplicationWindow {
                 }
 
                 ElementPalette {
+                    id: elementPalette
                     Layout.fillWidth: true
                     selectedAtom: window.selectedAtom
                     onElementSelected: function(element) { molecule.setAtomElement(window.selectedAtom, element) }
@@ -117,6 +118,8 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     RingTemplatePicker {
+                        // Wrap within the row instead of forcing the window wider.
+                        Layout.fillWidth: true
                         selectedRing: window.activeRing
                         onRingSelected: function(ring) { window.activeRing = ring; window.activeTool = "ring" }
                     }

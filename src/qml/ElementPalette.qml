@@ -46,17 +46,41 @@ Flow {
         width: 66; height: 58; font.pixelSize: 20
         onClicked: circledChargesToggled(checked)
     }
-    Label { text: "Abbrev"; font.pixelSize: 17; font.bold: true; height: 44; verticalAlignment: Text.AlignVCenter; width: 66 }
-    Repeater {
-        model: molecule.abbreviationButtons()
-        delegate: Button {
-            text: modelData.label
-            width: Math.max(46, text.length * 12 + 18)
-            height: 44
-            padding: 4
-            font.pixelSize: 16
-            enabled: selectedAtom >= 0
-            onClicked: abbreviationRequested(modelData.name)
+    // Group abbreviations open in a popup so they don't take three rows above the canvas.
+    readonly property bool popupOpen: abbreviationPopup.visible
+    Button {
+        objectName: "abbreviationsButton"
+        text: "Abbrev…"
+        width: 104; height: 58; font.pixelSize: 19
+        enabled: selectedAtom >= 0
+        onClicked: abbreviationPopup.open()
+    }
+    Popup {
+        id: abbreviationPopup
+        objectName: "abbreviationPopup"
+        parent: Overlay.overlay
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        padding: 18
+        width: 700
+        contentItem: Column {
+            spacing: 12
+            Label { text: "Abbreviations"; font.pixelSize: 24; font.bold: true }
+            Flow {
+                width: parent.width
+                spacing: 8
+                Repeater {
+                    model: molecule.abbreviationButtons()
+                    delegate: Button {
+                        text: modelData.label
+                        width: Math.max(76, text.length * 14 + 26)
+                        height: 58
+                        font.pixelSize: 20
+                        onClicked: { abbreviationRequested(modelData.name); abbreviationPopup.close() }
+                    }
+                }
+            }
+            Button { text: "Cancel"; height: 56; font.pixelSize: 19; onClicked: abbreviationPopup.close() }
         }
     }
 }

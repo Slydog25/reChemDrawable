@@ -84,10 +84,12 @@ Rectangle {
             ctx.beginPath(); ctx.moveTo(item.x1, item.y1); ctx.quadraticCurveTo(cx, cy, item.x2, item.y2); ctx.stroke()
             head(item.x2, item.y2, tx, ty, kind === "fishhook" ? 1 : 0)
         } else if (kind === "equilibrium") {
-            seg(item.x1 + nx * 4, item.y1 + ny * 4, item.x2 + nx * 4, item.y2 + ny * 4)
-            head(item.x2 + nx * 4, item.y2 + ny * 4, ux, uy, 1)
-            seg(item.x2 - nx * 4, item.y2 - ny * 4, item.x1 - nx * 4, item.y1 - ny * 4)
-            head(item.x1 - nx * 4, item.y1 - ny * 4, -ux, -uy, 1)
+            // ⇌: the upper line points forward, the lower one back, each with its
+            // half barb on the outside. With y down, the -n side is the upper one.
+            seg(item.x1 - nx * 4, item.y1 - ny * 4, item.x2 - nx * 4, item.y2 - ny * 4)
+            head(item.x2 - nx * 4, item.y2 - ny * 4, ux, uy, -1)
+            seg(item.x2 + nx * 4, item.y2 + ny * 4, item.x1 + nx * 4, item.y1 + ny * 4)
+            head(item.x1 + nx * 4, item.y1 + ny * 4, -ux, -uy, -1)
         } else if (kind === "retro") {
             const back = Math.min(length * 0.5, 14)
             seg(item.x1 + nx * 4, item.y1 + ny * 4, item.x2 - ux * back + nx * 4, item.y2 - uy * back + ny * 4)
