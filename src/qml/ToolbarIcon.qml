@@ -215,6 +215,10 @@ Canvas {
             ctx.lineWidth = 4; line(7, 38, 26, 19); ctx.lineWidth = 3
             sparkle(32, 12, 5); sparkle(19, 8, 3); sparkle(37, 25, 3)
             break
+        case "cleanScreen": // a screen with a refresh arrow
+            box(5, 7, 34, 26); line(16, 39, 28, 39)
+            arcArrow(22, 20, 7, Math.PI * 0.6, Math.PI * 0.2 + Math.PI * 2, false)
+            break
         case "rotate": arcArrow(22, 22, 14, Math.PI * 0.6, Math.PI * 0.2 + Math.PI * 2, false); break
         case "flipH": // mirror across a vertical axis
             dashed(22, 4, 22, 40)

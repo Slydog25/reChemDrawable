@@ -2,15 +2,19 @@
 #include "core/EditHistory.h"
 #include "core/Molecule.h"
 #include "core/ReactionLayer.h"
+#include "platform/DisplayController.h"
+#include "platform/DisplayProtocol.h"
 #include "platform/InputRouter.h"
 #include "platform/PanZoomGesture.h"
 #include "platform/PenTool.h"
 #include "platform/QmlJitWorkaround.h"
 #include "platform/QtfbClient.h"
 #include "platform/QuitSignals.h"
+#include "platform/RefreshPolicy.h"
 #include "platform/TwoFingerTap.h"
 
 #include <QGuiApplication>
+#include <QKeyEvent>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QElapsedTimer>
@@ -37,6 +41,7 @@ int main(int argc, char *argv[]) {
     ReactionLayer reactionLayer(&molecule);
     EditHistory editHistory(&molecule, &reactionLayer);
     Document document(&molecule, &reactionLayer);
+    DisplayController eink; // `eink` in QML: the toolbar's "Clean screen" button
     // Declared after the objects it exposes, so it is destroyed first and its
     // bindings never see them half torn down at exit.
     QQmlApplicationEngine engine;
@@ -44,6 +49,7 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("reactionLayer"), &reactionLayer);
     engine.rootContext()->setContextProperty(QStringLiteral("editHistory"), &editHistory);
     engine.rootContext()->setContextProperty(QStringLiteral("document"), &document);
+    engine.rootContext()->setContextProperty(QStringLiteral("eink"), &eink);
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
 #ifdef RECHEMDRAW_EXTERNAL_QML
     engine.load(QUrl::fromLocalFile(QCoreApplication::applicationDirPath()
@@ -73,6 +79,21 @@ int main(int argc, char *argv[]) {
     });
 
     QtfbClient qtfb;
+    // E-ink state (only used when QTFB_KEY is set). AppLoad's framebuffer is
+    // always portrait; `rotation` is how AppLoad currently shows it, and the
+    // window is 2160x1620 while landscape (see DisplayProtocol.h).
+    const QSize framebufferSize(PaperProWidth, PaperProHeight);
+    display::Rotation rotation = display::Rotation::Deg0;
+    QSize logicalSize = framebufferSize;
+    RefreshPolicy::Config refreshConfig;
+    // RECHEMDRAW_REFRESH_SWITCH=0 keeps AppLoad's default waveform throughout.
+    if (qEnvironmentVariableIsSet("RECHEMDRAW_REFRESH_SWITCH"))
+        refreshConfig.modeSwitching = qEnvironmentVariableIntValue("RECHEMDRAW_REFRESH_SWITCH") != 0;
+    RefreshPolicy refreshPolicy(refreshConfig);
+    display::VkbTranslator keyboard;
+    QElapsedTimer displayClock;
+    displayClock.start();
+    bool forceFullPresent = true;
     std::unique_ptr<PenTool> penTool;
     QTimer qtfbRefresh;
     QTimer qtfbInput;
@@ -87,14 +108,41 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         window->resize(PaperProWidth, PaperProHeight);
-        QObject::connect(&qtfbRefresh, &QTimer::timeout, &app, [&qtfb, window] {
-            qtfb.present(window->grabWindow());
+        // Follow AppLoad's rotation: resize the window and redraw everything.
+        auto followRotation = [&qtfb, &rotation, &logicalSize, &forceFullPresent, framebufferSize, window] {
+            if (qtfb.rotation() == rotation) return;
+            rotation = qtfb.rotation();
+            logicalSize = display::logicalSize(rotation, framebufferSize);
+            window->resize(logicalSize);
+            qtfb.invalidate();
+            forceFullPresent = true;
+        };
+        // "Clean screen": AppLoad's full refresh, then resend the whole picture.
+        QObject::connect(&eink, &DisplayController::cleanScreenRequested, &app, [&qtfb, &forceFullPresent] {
+            qtfb.requestFullRefresh();
+            forceFullPresent = true;
+        });
+        // Presents the window. Runs every 40 ms while the pen is busy and every
+        // 250 ms otherwise; the next run is scheduled after this one finishes,
+        // so a slow grab just lowers the rate.
+        qtfbRefresh.setSingleShot(true);
+        QObject::connect(&qtfbRefresh, &QTimer::timeout, &app, [&, window, followRotation] {
+            followRotation();
+            const RefreshPolicy::Action action = refreshPolicy.tick(displayClock.elapsed());
+            if (action.setMode >= 0) qtfb.setRefreshMode(action.setMode);
+            const bool force = forceFullPresent;
+            forceFullPresent = false;
+            if (qtfb.present(display::logicalToFramebuffer(rotation, window->grabWindow()), force))
+                refreshPolicy.framePresented();
+            // After the fast waveform: one clean update of what was drawn with it.
+            if (action.cleanUpdate && qtfb.presentClean()) refreshPolicy.framePresented();
+            qtfbRefresh.start(refreshPolicy.presentIntervalMs());
         });
         QPointer<QQuickItem> canvas = window->findChild<QQuickItem *>(QStringLiteral("moleculeCanvas"));
         if (!canvas) qWarning() << "qtfb: canvas not found; finger input will reach it";
         penTool = std::make_unique<PenTool>();
         if (!penTool->available()) qWarning() << "pen eraser: no pen input device found; the eraser end will draw";
-        QObject::connect(&qtfbInput, &QTimer::timeout, &app, [&qtfb, &editHistory, window, canvas, pen = penTool.get()] {
+        QObject::connect(&qtfbInput, &QTimer::timeout, &app, [&qtfb, &editHistory, &rotation, &logicalSize, &refreshPolicy, &keyboard, &displayClock, followRotation, framebufferSize, window, canvas, pen = penTool.get()] {
             static Qt::MouseButtons pressedButtons;
             static InputRouter router;
             static TwoFingerTap twoFingerTap;
@@ -107,7 +155,18 @@ int main(int argc, char *argv[]) {
                 QCoreApplication::exit(0); // see quitPoll above
                 return;
             }
+            followRotation();
             while (qtfb.pollInput(input)) {
+                if (input.type == display::InputVkbPress || input.type == display::InputVkbRelease) {
+                    // AppLoad's on-screen keyboard: x is a Qt::Key. Deliver it to
+                    // the focused item (the label or SMILES field).
+                    if (const auto key = keyboard.translate(input.type, input.x)) {
+                        QKeyEvent keyEvent(key->press ? QEvent::KeyPress : QEvent::KeyRelease, key->key, key->modifiers, key->text);
+                        QQuickItem *focused = window->activeFocusItem();
+                        QCoreApplication::sendEvent(focused ? static_cast<QObject *>(focused) : static_cast<QObject *>(window), &keyEvent);
+                    }
+                    continue;
+                }
                 // 0x1n are finger events, 0x2n pen events; n is press/release/move.
                 const bool isTouch = input.type >= 0x10 && input.type <= 0x12;
                 QEvent::Type eventType = QEvent::MouseMove;
@@ -132,8 +191,11 @@ int main(int argc, char *argv[]) {
                 default:
                     continue;
                 }
-                const QPointF position(qBound(0, input.x, PaperProWidth - 1),
-                                       qBound(0, input.y, PaperProHeight - 1));
+                // Positions arrive in framebuffer pixels; turn them into window
+                // coordinates when AppLoad shows the app rotated.
+                const QPointF position = display::framebufferToLogical(
+                    rotation, QPoint(qBound(0, input.x, framebufferSize.width() - 1), qBound(0, input.y, framebufferSize.height() - 1)),
+                    framebufferSize);
                 const QRectF canvasArea = canvas ? canvas->mapRectToScene(QRectF(0, 0, canvas->width(), canvas->height()))
                                                  : QRectF();
                 if (isTouch) {
@@ -144,7 +206,7 @@ int main(int argc, char *argv[]) {
                         // The first finger had pressed a menu button: release it
                         // over the canvas instead, which cancels that press.
                         pressedButtons &= ~Qt::LeftButton;
-                        const QPointF away = canvasArea.isValid() ? canvasArea.center() : QPointF(PaperProWidth / 2.0, PaperProHeight / 2.0);
+                        const QPointF away = canvasArea.isValid() ? canvasArea.center() : QPointF(logicalSize.width() / 2.0, logicalSize.height() / 2.0);
                         QMouseEvent cancel(QEvent::MouseButtonRelease, away, away, Qt::LeftButton, pressedButtons, Qt::NoModifier);
                         QCoreApplication::sendEvent(window, &cancel);
                     }
@@ -168,6 +230,11 @@ int main(int argc, char *argv[]) {
                 // The eraser end arrives as ordinary pen events; ask the pen which
                 // end is down when a stroke starts and send eraser strokes as the
                 // right button, which the canvas treats as erasing.
+                // Pen activity switches the panel to its fast waveform.
+                if (!isTouch) {
+                    const RefreshPolicy::Action action = refreshPolicy.penEvent(clock.elapsed(), phase != InputRouter::Phase::Release);
+                    if (action.setMode >= 0) qtfb.setRefreshMode(action.setMode);
+                }
                 if (!isTouch && phase == InputRouter::Phase::Press) eraserStroke = pen->eraserActive();
                 const Qt::MouseButton button = !isTouch && eraserStroke ? Qt::RightButton : Qt::LeftButton;
                 if (changedButton != Qt::NoButton) changedButton = button;
@@ -179,7 +246,7 @@ int main(int argc, char *argv[]) {
                 QCoreApplication::sendEvent(window, &mouseEvent);
             }
         });
-        qtfbRefresh.start(250);
+        qtfbRefresh.start(refreshPolicy.presentIntervalMs());
         qtfbInput.start(8);
     }
     return app.exec();

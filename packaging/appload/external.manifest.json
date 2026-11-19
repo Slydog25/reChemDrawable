@@ -1,5 +1,7 @@
 {
   "name": "reChemDrawable",
   "application": "reChemDrawable.sh",
-  "qtfb": true
+  "qtfb": true,
+  "supportsVirtualKeyboard": true,
+  "supportsRotation": true
 }

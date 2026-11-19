@@ -1,5 +1,7 @@
 #include "platform/QtfbClient.h"
 
+#include "platform/DirtyRect.h"
+
 #include <QByteArray>
 #include <QDebug>
 
@@ -16,7 +18,6 @@
 
 namespace {
 constexpr std::uint8_t Initialize = 0;
-constexpr std::uint8_t Update = 1;
 // AppLoad's Paper Pro RGB565 framebuffer format.  Format 0 is the legacy
 // reMarkable 2 framebuffer, with a different resolution.
 constexpr std::uint8_t Rgb565 = 3;
@@ -46,6 +47,9 @@ bool QtfbClient::connect(int width, int height) {
     close();
     width_ = width;
     height_ = height;
+    // If a device turns out to report landscape directions the other way round,
+    // RECHEMDRAW_FLIP_ROTATION=1 swaps them (see README).
+    flipRotation_ = qEnvironmentVariableIntValue("RECHEMDRAW_FLIP_ROTATION") != 0;
 
     bool keyOk = false;
     const std::uint32_t requestedKey = qEnvironmentVariableIntValue("QTFB_KEY", &keyOk);
@@ -82,10 +86,22 @@ bool QtfbClient::connect(int width, int height) {
     // ServerMessage is naturally aligned: its payload starts at byte 8 and
     // the size_t framebuffer length starts at byte 16 on the Paper Pro.
     std::uint8_t response[32] {};
-    if (::read(socketFd_, response, sizeof(response)) != static_cast<ssize_t>(sizeof(response))) {
-        qWarning() << "qtfb: initialization response failed";
-        close();
-        return false;
+    for (int attempt = 0;; ++attempt) {
+        if (::read(socketFd_, response, sizeof(response)) != static_cast<ssize_t>(sizeof(response))) {
+            qWarning() << "qtfb: initialization response failed";
+            close();
+            return false;
+        }
+        if (response[0] == display::MessageInitialize) break;
+        // A device-state message that overtook the response: keep its rotation.
+        const display::ServerEvent early = display::decodeServerMessage(response, sizeof(response));
+        if (early.kind == display::ServerEvent::Kind::Rotation)
+            rotation_ = display::rotationFromWire(early.rotation, flipRotation_);
+        if (attempt >= 3) {
+            qWarning() << "qtfb: no initialization response";
+            close();
+            return false;
+        }
     }
 
     const std::int32_t sharedKey = static_cast<std::int32_t>(readU32(response + 8));
@@ -129,23 +145,23 @@ bool QtfbClient::connect(int width, int height) {
     return true;
 }
 
-void QtfbClient::present(const QImage &image) {
-    if (!isConnected() || image.isNull())
-        return;
+bool QtfbClient::sendMessage(const display::ClientMessageBytes &message) {
+    if (!isConnected()) return false;
+    const ssize_t written = ::write(socketFd_, message.data(), message.size());
+    if (written == static_cast<ssize_t>(message.size())) return true;
+    // The socket is non-blocking; a full buffer (AppLoad is busy) drops the
+    // message. present() reacts by resending the whole screen next time.
+    qWarning() << "qtfb: message type" << message[0] << "not sent";
+    return false;
+}
 
-    const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
-    // The window is grabbed on a timer; only push frames that actually changed,
-    // so an idle editor does not keep refreshing the e-ink panel.
-    if (rgb == lastFrame_)
-        return;
-    lastFrame_ = rgb;
-    std::memset(sharedMemory_, 0xff, sharedMemorySize_);
-    const int copyWidth = std::min(width_, rgb.width());
-    const int copyHeight = std::min(height_, rgb.height());
-    for (int y = 0; y < copyHeight; ++y) {
+// Copies the rectangle into the shared RGB565 framebuffer (little endian).
+void QtfbClient::copyRegion(const QImage &rgb, const QRect &rect) {
+    const QRect area = rect & QRect(0, 0, std::min(width_, rgb.width()), std::min(height_, rgb.height()));
+    for (int y = area.top(); y <= area.bottom(); ++y) {
         const auto *source = rgb.constScanLine(y);
         auto *destination = sharedMemory_ + static_cast<std::size_t>(y) * width_ * 2;
-        for (int x = 0; x < copyWidth; ++x) {
+        for (int x = area.left(); x <= area.right(); ++x) {
             const auto *pixel = source + x * 3;
             const std::uint16_t rgb565 = static_cast<std::uint16_t>(
                 ((pixel[0] >> 3) << 11) | ((pixel[1] >> 2) << 5) | (pixel[2] >> 3));
@@ -153,39 +169,81 @@ void QtfbClient::present(const QImage &image) {
             destination[x * 2 + 1] = static_cast<std::uint8_t>(rgb565 >> 8);
         }
     }
-
-    std::uint8_t update[24] {};
-    update[0] = Update;
-    writeU32(update + 8, 0);
-    writeU32(update + 12, 0);
-    writeU32(update + 16, width_);
-    writeU32(update + 20, height_);
-    if (::write(socketFd_, update, sizeof(update)) != static_cast<ssize_t>(sizeof(update)))
-        qWarning() << "qtfb: display update request failed";
 }
+
+bool QtfbClient::present(const QImage &image, bool force) {
+    if (!isConnected() || image.isNull())
+        return false;
+
+    const QImage rgb = image.convertToFormat(QImage::Format_RGB888);
+    // Only push what actually changed, so an idle editor does not keep
+    // refreshing the e-ink panel and a pen stroke refreshes just its box.
+    DirtyResult dirty = computeDirtyRect(lastFrame_, rgb, 16);
+    if (force) {
+        dirty.changed = dirty.full = true;
+        dirty.rect = QRect(QPoint(0, 0), rgb.size());
+    }
+    if (!dirty.changed)
+        return false;
+    // Pixels outside the picture (if it is smaller than the framebuffer) are white.
+    if (dirty.full) std::memset(sharedMemory_, 0xff, sharedMemorySize_);
+    copyRegion(rgb, dirty.rect);
+    lastFrame_ = rgb;
+
+    const bool sent = dirty.full ? sendMessage(display::encodeUpdateAll(width_, height_))
+                                 : sendMessage(display::encodeUpdatePartial(dirty.rect));
+    if (!sent) {
+        lastFrame_ = QImage(); // unsure what the panel shows: resend everything next time
+        return false;
+    }
+    dirtySinceClean_ = dirty.full ? QRect(0, 0, width_, height_) : dirtySinceClean_.united(dirty.rect);
+    return true;
+}
+
+bool QtfbClient::presentClean() {
+    if (!isConnected() || dirtySinceClean_.isNull()) return false;
+    const QRect area = dirtySinceClean_;
+    dirtySinceClean_ = QRect();
+    return area.width() >= width_ && area.height() >= height_
+               ? sendMessage(display::encodeUpdateAll(width_, height_))
+               : sendMessage(display::encodeUpdatePartial(area));
+}
+
+void QtfbClient::invalidate() { lastFrame_ = QImage(); }
+
+void QtfbClient::setRefreshMode(int mode) { sendMessage(display::encodeSetRefreshMode(mode)); }
+
+void QtfbClient::requestFullRefresh() { sendMessage(display::encodeRequestFullRefresh()); }
 
 bool QtfbClient::pollInput(QtfbInputEvent &event) {
     if (!isConnected())
         return false;
 
-    // ServerMessage is 32 bytes on aarch64: the union begins at byte 8 and
-    // UserInputContents places its type, device id, x, and y at 8, 12, 16,
-    // and 20 respectively.
-    std::uint8_t message[32] {};
-    const ssize_t bytesRead = ::recv(socketFd_, message, sizeof(message), MSG_DONTWAIT);
-    // On a SEQPACKET socket, 0 means AppLoad closed its end: the app was closed.
-    if (bytesRead == 0 || (bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
-        serverHungUp_ = true;
-        return false;
+    for (;;) {
+        // ServerMessage is 32 bytes on aarch64 (see DisplayProtocol.h).
+        std::uint8_t message[display::ServerMessageSize] {};
+        const ssize_t bytesRead = ::recv(socketFd_, message, sizeof(message), MSG_DONTWAIT);
+        // On a SEQPACKET socket, 0 means AppLoad closed its end: the app was closed.
+        if (bytesRead == 0 || (bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
+            serverHungUp_ = true;
+            return false;
+        }
+        if (bytesRead < 0)
+            return false;
+        const display::ServerEvent decoded = display::decodeServerMessage(message, static_cast<std::size_t>(bytesRead));
+        if (decoded.kind == display::ServerEvent::Kind::Rotation) {
+            rotation_ = display::rotationFromWire(decoded.rotation, flipRotation_);
+            continue;
+        }
+        if (decoded.kind != display::ServerEvent::Kind::Input)
+            continue;
+        event.type = decoded.inputType;
+        event.devId = decoded.devId;
+        event.x = decoded.x;
+        event.y = decoded.y;
+        // Virtual keyboard events carry the Qt key code in x.
+        return true;
     }
-    if (bytesRead < 24 || message[0] != 4)
-        return false;
-
-    event.type = static_cast<int>(readU32(message + 8));
-    event.devId = static_cast<int>(readU32(message + 12));
-    event.x = static_cast<int>(readU32(message + 16));
-    event.y = static_cast<int>(readU32(message + 20));
-    return true;
 }
 
 bool QtfbClient::serverHungUp() const { return serverHungUp_; }
@@ -205,4 +263,5 @@ void QtfbClient::close() {
     }
     sharedMemorySize_ = 0;
     lastFrame_ = QImage();
+    dirtySinceClean_ = QRect();
 }

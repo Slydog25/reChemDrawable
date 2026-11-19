@@ -94,4 +94,15 @@ TestCase {
         grabImage(findChild(window, "moleculeCanvas")).save("/workspace/build-pc/screen-smiles.png")
         window.destroy()
     }
+
+    // Landscape (AppLoad rotated): the window is 2160x1620 and the layout must still fit.
+    function test_landscape() {
+        const component = Qt.createComponent("../../src/qml/Main.qml")
+        const window = component.createObject(null, { width: 2160, height: 1620 })
+        document.newDocument()
+        molecule.importSmiles("CC(=O)Oc1ccccc1C(=O)O", 700, 300)
+        wait(400)
+        grabImage(window.contentItem).save("/workspace/build-pc/screen-landscape.png")
+        window.destroy()
+    }
 }
