@@ -1312,10 +1312,12 @@ QHash<QString, GenericRingTemplate> buildGenericTemplates() {
     // C5, N1(H), C2, N3, C4: attachment at C5.
     t.insert(QStringLiteral("imidazole"), regularTemplate(list("C N C N C"), {1, 1, 2, 1, 2}, plain));
 
-    // Textbook chair: a skewed hexagon whose opposite sides are parallel.
+    // Textbook chair: foot down on the left, head up on the right, bonds in three
+    // parallel pairs (C1-C2 || C4-C5 at 60 deg up, C2-C3 || C5-C6 sloping 15 deg
+    // down, C3-C4 || C6-C1 at 30 deg up), every bond one bond length.
     {
         GenericRingTemplate chair;
-        const double pts[6][2] = {{0.0, 0.0}, {0.85, -0.5}, {1.85, -0.35}, {2.7, 0.25}, {1.85, 0.75}, {0.85, 0.6}};
+        const double pts[6][2] = {{0.0, 0.0}, {0.5, -0.866}, {1.466, -0.607}, {2.332, -1.107}, {1.832, -0.241}, {0.866, -0.5}};
         double cx = 0, cy = 0;
         for (const auto &p : pts) { cx += p[0] / 6.0; cy += p[1] / 6.0; }
         for (int index = 0; index < 6; ++index) {
