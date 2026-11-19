@@ -7,6 +7,7 @@
 #include "core/ReactionLayer.h"
 #include "core/SvgWriter.h"
 #include "platform/InputRouter.h"
+#include "platform/PenTool.h"
 
 #include <QLineF>
 #include <QtTest>
@@ -740,6 +741,43 @@ private slots:
         document.discardChanges();
         QVERIFY(!document.isDirty());
         QVERIFY(document.saveRecoveryCopy().isEmpty());
+    }
+    void readsThePensEraserBit() {
+        // The tablet's pen device reports KEY=1c03 in its top word (bits 320-383):
+        // BTN_TOOL_PEN (320), BTN_TOOL_RUBBER (321), BTN_TOUCH (330),
+        // BTN_STYLUS (331), BTN_STYLUS2 (332).
+        unsigned char bits[48] = {};
+        bits[40] = 0x03;
+        bits[41] = 0x1c;
+        QVERIFY(PenTool::keyBitSet(bits, sizeof(bits), 320));
+        QVERIFY(PenTool::keyBitSet(bits, sizeof(bits), 321));
+        QVERIFY(PenTool::keyBitSet(bits, sizeof(bits), 330));
+        QVERIFY(PenTool::keyBitSet(bits, sizeof(bits), 332));
+        QVERIFY(!PenTool::keyBitSet(bits, sizeof(bits), 322));
+        QVERIFY(!PenTool::keyBitSet(bits, sizeof(bits), 1000));
+        QVERIFY(!PenTool::keyBitSet(bits, sizeof(bits), -1));
+    }
+    void groupsEditsIntoOneUndoStep() {
+        Molecule molecule;
+        ReactionLayer layer(&molecule);
+        EditHistory history(&molecule, &layer);
+        const int a = molecule.addAtom(0, 0), b = molecule.addAtom(48, 0);
+        const int arrow = layer.addArrow(100, 0, 200, 0);
+        history.beginGroup();
+        molecule.removeAtom(a);
+        layer.removeItem(arrow);
+        molecule.removeAtom(b);
+        history.endGroup();
+        QCOMPARE(molecule.atomData().size(), 0);
+        QCOMPARE(layer.items().size(), 0);
+        QVERIFY(history.undo());
+        QCOMPARE(molecule.atomData().size(), 2);
+        QCOMPARE(layer.items().size(), 1);
+        QVERIFY(history.redo());
+        QCOMPARE(molecule.atomData().size(), 0);
+        QVERIFY(history.undo());
+        QVERIFY(history.undo());
+        QCOMPARE(layer.items().size(), 0);
     }
     void preservesWavyBondsInMolfiles() {
         Molecule source;

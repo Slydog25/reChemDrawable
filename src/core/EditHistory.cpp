@@ -40,13 +40,24 @@ bool EditHistory::redo() {
 }
 
 void EditHistory::clearAll() {
-    m_grouping = true;
-    m_group.clear();
+    beginGroup();
     m_molecule->clear();
     m_reactions->clear();
+    endGroup();
+}
+
+void EditHistory::beginGroup() {
+    if (m_grouping) return;
+    m_grouping = true;
+    m_group.clear();
+}
+
+void EditHistory::endGroup() {
+    if (!m_grouping) return;
     m_grouping = false;
     if (m_group.isEmpty()) return;
     m_undo.append(m_group);
+    if (m_undo.size() > MaxSteps) m_undo.removeFirst();
     m_redo.clear();
     m_group.clear();
 }

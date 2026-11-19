@@ -3,6 +3,7 @@
 #include "core/Molecule.h"
 #include "core/ReactionLayer.h"
 #include "platform/InputRouter.h"
+#include "platform/PenTool.h"
 #include "platform/QmlJitWorkaround.h"
 #include "platform/QtfbClient.h"
 #include "platform/QuitSignals.h"
@@ -18,6 +19,8 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QTimer>
+
+#include <memory>
 
 namespace {
 constexpr int PaperProWidth = 1620;
@@ -61,6 +64,7 @@ int main(int argc, char *argv[]) {
     });
 
     QtfbClient qtfb;
+    std::unique_ptr<PenTool> penTool;
     QTimer qtfbRefresh;
     QTimer qtfbInput;
     if (qEnvironmentVariableIsSet("QTFB_KEY")) {
@@ -79,9 +83,12 @@ int main(int argc, char *argv[]) {
         });
         QPointer<QQuickItem> canvas = window->findChild<QQuickItem *>(QStringLiteral("moleculeCanvas"));
         if (!canvas) qWarning() << "qtfb: canvas not found; finger input will reach it";
-        QObject::connect(&qtfbInput, &QTimer::timeout, &app, [&qtfb, window, canvas] {
+        penTool = std::make_unique<PenTool>();
+        if (!penTool->available()) qWarning() << "pen eraser: no pen input device found; the eraser end will draw";
+        QObject::connect(&qtfbInput, &QTimer::timeout, &app, [&qtfb, window, canvas, pen = penTool.get()] {
             static Qt::MouseButtons pressedButtons;
             static InputRouter router;
+            static bool eraserStroke = false;
             QtfbInputEvent input;
             if (qtfb.serverHungUp()) {
                 QCoreApplication::quit();
@@ -119,8 +126,15 @@ int main(int argc, char *argv[]) {
                 if (!router.accept(isTouch ? InputRouter::Source::Touch : InputRouter::Source::Pen, phase, position,
                                    canvasArea, window->property("dialogOpen").toBool()))
                     continue;
-                if (phase == InputRouter::Phase::Press) pressedButtons |= Qt::LeftButton;
-                if (phase == InputRouter::Phase::Release) pressedButtons &= ~Qt::LeftButton;
+                // The eraser end arrives as ordinary pen events; ask the pen which
+                // end is down when a stroke starts and send eraser strokes as the
+                // right button, which the canvas treats as erasing.
+                if (!isTouch && phase == InputRouter::Phase::Press) eraserStroke = pen->eraserActive();
+                const Qt::MouseButton button = !isTouch && eraserStroke ? Qt::RightButton : Qt::LeftButton;
+                if (changedButton != Qt::NoButton) changedButton = button;
+                if (phase == InputRouter::Phase::Press) pressedButtons |= button;
+                if (phase == InputRouter::Phase::Release) pressedButtons &= ~button;
+                if (!isTouch && phase == InputRouter::Phase::Release) eraserStroke = false;
                 QMouseEvent mouseEvent(eventType, position, position, changedButton,
                                        pressedButtons, Qt::NoModifier);
                 QCoreApplication::sendEvent(window, &mouseEvent);

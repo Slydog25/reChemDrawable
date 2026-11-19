@@ -178,6 +178,24 @@ Rectangle {
         drawing.requestPaint()
     }
 
+    // Removes the arrow or label, atom, or bond under (x, y) in model coordinates.
+    function eraseAt(x, y) {
+        const item = reactionLayer.itemAt(x, y, 16 / zoom)
+        if (item >= 0) return reactionLayer.removeItem(item)
+        const atom = molecule.atomAt(x, y, 22 / zoom)
+        if (atom >= 0) return molecule.removeAtom(atom)
+        const bond = molecule.bondAt(x, y, 16 / zoom)
+        if (bond >= 0) return molecule.removeBond(bond)
+        return false
+    }
+
+    // Erases along a stroke segment, sampling often enough that a quick
+    // stroke does not skip over a bond.
+    function eraseAlong(x1, y1, x2, y2) {
+        const steps = Math.max(1, Math.ceil(Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)) / (8 / zoom)))
+        for (let i = 1; i <= steps; ++i) eraseAt(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps)
+    }
+
     function rotateSelection() {
         if (selectedAtoms.length) molecule.rotateAtoms(selectedAtoms, 30)
     }
@@ -385,6 +403,12 @@ Rectangle {
         id: canvasInput
         objectName: "canvasInput"
         anchors.fill: parent
+        // The right button is the pen's eraser end (main.cpp sends eraser strokes
+        // that way); on desktop, right-drag erases too.
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        property bool erasing: false
+        property real eraseLastX: 0
+        property real eraseLastY: 0
         property int dragAtom: -1
         property int dragReactionItem: -1
         property real dragStartX: 0
@@ -403,6 +427,14 @@ Rectangle {
         onPressed: function(mouse) {
             const point = root.modelPoint(mouse.x, mouse.y)
             dragStartX = mouse.x; dragStartY = mouse.y
+            if (mouse.button === Qt.RightButton || activeTool === "erase") {
+                // One eraser stroke is one undo step, however much it removes.
+                erasing = true
+                editHistory.beginGroup()
+                root.eraseAt(point.x, point.y)
+                eraseLastX = point.x; eraseLastY = point.y
+                return
+            }
             if (activeTool === "draw") {
                 drawStartAtom = molecule.atomAt(point.x, point.y, 22 / root.zoom)
                 drawDragged = false
@@ -433,6 +465,12 @@ Rectangle {
             }
         }
         onPositionChanged: function(mouse) {
+            if (erasing) {
+                const point = root.modelPoint(mouse.x, mouse.y)
+                root.eraseAlong(eraseLastX, eraseLastY, point.x, point.y)
+                eraseLastX = point.x; eraseLastY = point.y
+                return
+            }
             if (pressed && activeTool === "draw" && drawStartAtom >= 0) {
                 const point = root.modelPoint(mouse.x, mouse.y)
                 if (Math.abs(mouse.x - dragStartX) > 12 || Math.abs(mouse.y - dragStartY) > 12) {
@@ -469,6 +507,13 @@ Rectangle {
             }
         }
         onReleased: function(mouse) {
+            if (erasing) {
+                erasing = false
+                editHistory.endGroup()
+                skipNextClick = true
+                root.selectedAtomChangedByCanvas(-1)
+                return
+            }
             if (activeTool === "draw" && drawStartAtom >= 0 && drawDragged) {
                 const point = root.modelPoint(mouse.x, mouse.y)
                 const target = molecule.atomAt(point.x, point.y, 22 / root.zoom)
@@ -511,6 +556,9 @@ Rectangle {
             dragAtom = -1
             dragReactionItem = -1
         }
+        onCanceled: {
+            if (erasing) { erasing = false; editHistory.endGroup() }
+        }
         onClicked: function(mouse) {
             if (skipNextClick) {
                 skipNextClick = false
@@ -552,14 +600,6 @@ Rectangle {
             if (activeTool === "label") {
                 if (reactionLayer.addLabel(root.labelText, point.x, point.y) >= 0) status("Text label added.")
                 else status("Enter label text before placing it.")
-                return
-            }
-            if (activeTool === "erase") {
-                const reactionItem = reactionLayer.itemAt(point.x, point.y, 16 / root.zoom)
-                if (reactionItem >= 0) reactionLayer.removeItem(reactionItem)
-                else if (hitAtom >= 0) molecule.removeAtom(hitAtom)
-                else if (hitBond >= 0) molecule.removeBond(hitBond)
-                selectedAtomChangedByCanvas(-1)
                 return
             }
             if (activeTool === "bond") {

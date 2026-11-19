@@ -19,6 +19,10 @@ public:
     Q_INVOKABLE bool redo();
     // Clears the molecule and the annotations as a single undoable step.
     Q_INVOKABLE void clearAll();
+    // Edits between beginGroup() and endGroup() undo and redo as one step
+    // (e.g. everything one eraser stroke removed). Groups do not nest.
+    Q_INVOKABLE void beginGroup();
+    Q_INVOKABLE void endGroup();
 
 private:
     static constexpr int MaxSteps = 400;

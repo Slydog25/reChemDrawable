@@ -85,6 +85,37 @@ Item {
             canvas.gridSnapEnabled = false
         }
 
+        function test_eraserStrokeErasesInOneUndoStep() {
+            // A three-atom chain plus an arrow, all crossed by one right-button
+            // (eraser-end) stroke.
+            const a = molecule.addAtom(150, 150)
+            const b = molecule.extendFromAtom(a, 198, 150)
+            molecule.extendFromAtom(b, 246, 150)
+            reactionLayer.addArrow(300, 120, 300, 200)
+            mousePress(canvas, 120, 150, Qt.RightButton)
+            mouseMove(canvas, 200, 152, -1, Qt.RightButton)
+            mouseMove(canvas, 330, 150, -1, Qt.RightButton)
+            mouseRelease(canvas, 330, 150, Qt.RightButton)
+            compare(molecule.atoms().length, 0)
+            compare(reactionLayer.items().length, 0)
+            verify(editHistory.undo())
+            compare(molecule.atoms().length, 3)
+            compare(molecule.bonds().length, 2)
+            compare(reactionLayer.items().length, 1)
+        }
+
+        function test_eraseToolErasesByDragging() {
+            const a = molecule.addAtom(150, 300)
+            molecule.extendFromAtom(a, 198, 300)
+            canvas.activeTool = "erase"
+            mousePress(canvas, 140, 300)
+            mouseMove(canvas, 210, 300, -1, Qt.LeftButton)
+            mouseRelease(canvas, 210, 300)
+            compare(molecule.atoms().length, 0)
+            verify(editHistory.undo())
+            compare(molecule.atoms().length, 2)
+        }
+
         function test_zoomButtonsAndFit() {
             canvas.zoomIn()
             verify(canvas.zoom > 1)

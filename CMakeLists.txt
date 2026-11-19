@@ -30,6 +30,8 @@ set(CORE_SOURCES
 set(PLATFORM_SOURCES
     src/platform/InputRouter.cpp
     src/platform/InputRouter.h
+    src/platform/PenTool.cpp
+    src/platform/PenTool.h
     src/platform/QmlJitWorkaround.h
     src/platform/QtfbClient.cpp
     src/platform/QtfbClient.h
@@ -75,6 +77,8 @@ if(BUILD_TESTING)
         tests/test_molecule.cpp
         src/platform/InputRouter.cpp
         src/platform/InputRouter.h
+        src/platform/PenTool.cpp
+        src/platform/PenTool.h
         ${CORE_SOURCES}
         ${CORE_HEADERS}
     )
