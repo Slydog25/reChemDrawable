@@ -116,6 +116,28 @@ Item {
             compare(molecule.atoms().length, 2)
         }
 
+        // Tapping just inside a single bond of a benzene with the benzene ring tool
+        // used to do nothing (or, on a double bond, stack a ring inside the old one).
+        function test_ringToolFusesBenzeneOnTheOutside() {
+            molecule.stampRing("benzene", 300, 300)
+            const atoms = molecule.atoms()
+            const bonds = molecule.bonds()
+            let shared = null
+            for (let i = 0; i < bonds.length; ++i) if (bonds[i].order === 1) { shared = bonds[i]; break }
+            let a, b
+            for (let i = 0; i < atoms.length; ++i) { if (atoms[i].id === shared.atomA) a = atoms[i]; if (atoms[i].id === shared.atomB) b = atoms[i] }
+            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
+            const toward = Math.sqrt((300 - mx) * (300 - mx) + (300 - my) * (300 - my))
+            canvas.ringTemplate = "benzene"
+            canvas.activeTool = "ring"
+            mouseClick(canvas, mx + (300 - mx) / toward * 8, my + (300 - my) / toward * 8)
+            compare(molecule.formula(), "C10H8")
+            const all = molecule.atoms()
+            for (let i = 0; i < all.length; ++i)
+                for (let j = i + 1; j < all.length; ++j)
+                    verify(Math.abs(all[i].x - all[j].x) + Math.abs(all[i].y - all[j].y) > 20)
+        }
+
         function test_zoomButtonsAndFit() {
             canvas.zoomIn()
             verify(canvas.zoom > 1)

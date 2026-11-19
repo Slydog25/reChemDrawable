@@ -105,6 +105,54 @@ private slots:
         QCOMPARE(benzene.bondData().at(0).style, QString("benzene"));
         QCOMPARE(benzene.bondData().at(0).order, 2);
     }
+    void fusesRingsOntoAnySideOfBenzene() {
+        const double length = GeometryEngine::StandardBondLength;
+        // Every side of a benzene, single or double in the Kekule drawing, and a
+        // tap on, just outside, or just inside the bond: always naphthalene on the
+        // outside, never atoms on top of each other.
+        for (int side = 0; side < 6; ++side) {
+            for (const double offset : {0.0, 10.0, -10.0}) {
+                Molecule molecule;
+                QVERIFY(molecule.stampRing("benzene", 0, 0));
+                const Bond shared = molecule.bondData().at(side);
+                QPointF a, b;
+                for (const Atom &atom : molecule.atomData()) {
+                    if (atom.id == shared.atomA) a = QPointF(atom.x, atom.y);
+                    if (atom.id == shared.atomB) b = QPointF(atom.x, atom.y);
+                }
+                const QPointF midpoint = (a + b) / 2.0;
+                const QPointF outward = midpoint / QLineF(QPointF(0, 0), midpoint).length();
+                const QPointF tap = midpoint + outward * offset;
+                const QString where = QString("side %1 offset %2").arg(side).arg(offset);
+                QVERIFY2(molecule.stampRingAtBond("benzene", shared.id, tap.x(), tap.y()), qPrintable(where));
+                QCOMPARE(molecule.formula(), QString("C10H8"));
+                QCOMPARE(molecule.bondData().size(), 11);
+                QCOMPARE(molecule.bondData().at(side).order, shared.order);
+                const QVector<Atom> &atoms = molecule.atomData();
+                QPointF newCenter;
+                for (int i = 0; i < atoms.size(); ++i) {
+                    if (i >= 6) newCenter += QPointF(atoms[i].x, atoms[i].y) / 4.0;
+                    for (int j = i + 1; j < atoms.size(); ++j)
+                        QVERIFY2(QLineF(QPointF(atoms[i].x, atoms[i].y), QPointF(atoms[j].x, atoms[j].y)).length() > length * 0.9, qPrintable(where));
+                }
+                // The new ring's far atoms lie outside the original ring.
+                QVERIFY2(QPointF::dotProduct(newCenter - midpoint, outward) > 0, qPrintable(where));
+                int doubles = 0;
+                for (const Bond &bond : molecule.bondData()) doubles += bond.order == 2;
+                QCOMPARE(doubles, 5);
+            }
+        }
+
+        // A saturated ring on an aromatic bond leaves the benzene untouched.
+        Molecule tetralin;
+        QVERIFY(tetralin.stampRing("benzene", 0, 0));
+        const Bond doubleBond = tetralin.bondData().first();
+        QCOMPARE(doubleBond.order, 2);
+        QVERIFY(tetralin.stampRingAtBond("cyclohexane", doubleBond.id, 0, 0));
+        QCOMPARE(tetralin.bondData().first().order, 2);
+        QCOMPARE(tetralin.bondData().first().style, QString("benzene"));
+        QCOMPARE(tetralin.formula(), QString("C10H12"));
+    }
     void suggestsAnOpenBondDirection() {
         // One horizontal bond: the next one leaves at 120 degrees, bending upward.
         Molecule molecule;

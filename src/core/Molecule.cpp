@@ -524,11 +524,17 @@ bool Molecule::stampRingAtBond(const QString &templateName, int bondId, double x
     Atom *b = findAtom(sharedBond->atomB);
     if (!a || !b) return false;
 
-    const int desiredSharedOrder = ringBondOrder(templateName, 0);
-    const int aAddedOrder = ringBondOrder(templateName, sides - 1);
-    const int bAddedOrder = ringBondOrder(templateName, 1);
-    if (valenceUsed(a->id) - sharedBond->order + desiredSharedOrder + aAddedOrder > maxValence(*a) ||
-        valenceUsed(b->id) - sharedBond->order + desiredSharedOrder + bAddedOrder > maxValence(*b)) {
+    const bool benzeneTemplate = templateName == QStringLiteral("benzene");
+    const int aId = a->id, bId = b->id;
+    // The new ring's own bonds run single, double, ..., single from b back to a,
+    // so the shared bond keeps the order it has: fused onto either side of a
+    // Kekule benzene this gives naphthalene. A plain single bond becomes double,
+    // making the new ring a full benzene, when both atoms have room for it.
+    int sharedOrder = sharedBond->order;
+    if (benzeneTemplate && sharedOrder == 1 && valenceUsed(aId) + 2 <= maxValence(*a) && valenceUsed(bId) + 2 <= maxValence(*b))
+        sharedOrder = 2;
+    if (valenceUsed(aId) - sharedBond->order + sharedOrder + 1 > maxValence(*a) ||
+        valenceUsed(bId) - sharedBond->order + sharedOrder + 1 > maxValence(*b)) {
         emit message(QStringLiteral("That ring would exceed the selected bond's basic valence limit."));
         return false;
     }
@@ -538,11 +544,20 @@ bool Molecule::stampRingAtBond(const QString &templateName, int bondId, double x
     const double length = qSqrt(edge.x() * edge.x() + edge.y() * edge.y());
     if (length < 1.0) return false;
     const QPointF midpoint = (aPoint + bPoint) / 2.0;
-    QPointF normal(-edge.y() / length, edge.x() / length);
-    const QPointF target(x, y);
-    if (QPointF::dotProduct(target - midpoint, normal) < 0.0) normal = -normal;
     const double radius = length / (2.0 * qSin(qDegreesToRadians(180.0 / sides)));
     const double apothem = radius * qCos(qDegreesToRadians(180.0 / sides));
+    // Build on the side with room: a bond in an existing ring already has atoms
+    // where the new ring would go on the inside. Only for a bare bond does the
+    // tap decide, since a tap on the bond line itself is ambiguous.
+    QPointF normal(-edge.y() / length, edge.x() / length);
+    if (QPointF::dotProduct(QPointF(x, y) - midpoint, normal) < 0.0) normal = -normal;
+    const auto crowding = [this, aId, bId, radius](const QPointF &candidateCenter) {
+        int count = 0;
+        for (const Atom &atom : m_atoms)
+            if (atom.id != aId && atom.id != bId && QLineF(candidateCenter, QPointF(atom.x, atom.y)).length() < radius * 1.1) ++count;
+        return count;
+    };
+    if (crowding(midpoint - normal * apothem) < crowding(midpoint + normal * apothem)) normal = -normal;
     const QPointF center = midpoint + normal * apothem;
     const QPointF fromCenterA = aPoint - center, fromCenterB = bPoint - center;
     const double cross = fromCenterA.x() * fromCenterB.y() - fromCenterA.y() * fromCenterB.x();
@@ -551,9 +566,11 @@ bool Molecule::stampRingAtBond(const QString &templateName, int bondId, double x
     const double step = direction * (2.0 * 3.14159265358979323846 / sides);
 
     const Snapshot before = snapshot();
-    sharedBond->order = desiredSharedOrder;
-    sharedBond->style = templateName == QStringLiteral("benzene") ? QStringLiteral("benzene") : QStringLiteral("plain");
-    QVector<int> ids = {a->id, b->id};
+    sharedBond->order = sharedOrder;
+    // A plain shared bond joins the new benzene's drawing style; a wedge, dash
+    // or other style the user set is left alone.
+    if (benzeneTemplate && sharedBond->style == QStringLiteral("plain")) sharedBond->style = QStringLiteral("benzene");
+    QVector<int> ids = {aId, bId};
     for (int index = 2; index < sides; ++index) {
         const double angle = firstAngle + step * (index - 1);
         const QPointF point = center + QPointF(qCos(angle) * radius, qSin(angle) * radius);
