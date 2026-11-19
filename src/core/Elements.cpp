@@ -1,6 +1,7 @@
 #include "Elements.h"
 
 #include <QHash>
+#include <QStringList>
 #include <QtGlobal>
 
 namespace Elements {
@@ -75,6 +76,24 @@ bool canBeAromatic(const QString &symbol) {
     static const QVector<QString> aromatic = {QStringLiteral("B"), QStringLiteral("C"), QStringLiteral("N"),
         QStringLiteral("O"), QStringLiteral("P"), QStringLiteral("S"), QStringLiteral("Se")};
     return aromatic.contains(symbol);
+}
+
+int atomicNumber(const QString &symbol) {
+    static const QStringList symbols = QStringList()
+        << "H" << "He" << "Li" << "Be" << "B" << "C" << "N" << "O" << "F" << "Ne"
+        << "Na" << "Mg" << "Al" << "Si" << "P" << "S" << "Cl" << "Ar" << "K" << "Ca"
+        << "Sc" << "Ti" << "V" << "Cr" << "Mn" << "Fe" << "Co" << "Ni" << "Cu" << "Zn"
+        << "Ga" << "Ge" << "As" << "Se" << "Br" << "Kr" << "Rb" << "Sr" << "Y" << "Zr"
+        << "Nb" << "Mo" << "Tc" << "Ru" << "Rh" << "Pd" << "Ag" << "Cd" << "In" << "Sn"
+        << "Sb" << "Te" << "I" << "Xe" << "Cs" << "Ba" << "La" << "Ce" << "Pr" << "Nd"
+        << "Pm" << "Sm" << "Eu" << "Gd" << "Tb" << "Dy" << "Ho" << "Er" << "Tm" << "Yb"
+        << "Lu" << "Hf" << "Ta" << "W" << "Re" << "Os" << "Ir" << "Pt" << "Au" << "Hg"
+        << "Tl" << "Pb" << "Bi" << "Po" << "At" << "Rn" << "Fr" << "Ra" << "Ac" << "Th"
+        << "Pa" << "U" << "Np" << "Pu" << "Am" << "Cm" << "Bk" << "Cf" << "Es" << "Fm"
+        << "Md" << "No" << "Lr" << "Rf" << "Db" << "Sg" << "Bh" << "Hs" << "Mt" << "Ds"
+        << "Rg" << "Cn" << "Nh" << "Fl" << "Mc" << "Lv" << "Ts" << "Og";
+    const int index = symbols.indexOf(symbol);
+    return index < 0 ? 0 : index + 1;
 }
 
 } // namespace Elements

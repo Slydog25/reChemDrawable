@@ -77,6 +77,8 @@ public:
     Q_INVOKABLE bool canAddBond(int atomA, int atomB, int order = 1) const;
     Q_INVOKABLE QString formula() const;
     Q_INVOKABLE QString smiles() const;
+    // CIP labels perceived from the drawing: [{atomId or bondId, kind, label, text, x, y}].
+    Q_INVOKABLE QVariantList stereoDescriptors() const;
     double standardBondLength() const;
     // Hydrogens implied on a non-hydrogen atom by its element, charge, and bonds.
     int implicitHydrogens(const Atom &atom) const;

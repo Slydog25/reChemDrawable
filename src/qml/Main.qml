@@ -16,6 +16,7 @@ ApplicationWindow {
     property string activeRing: "cyclohexane"
     property int selectedAtom: -1
     property bool gridSnapEnabled: false
+    property bool stereoLabelsVisible: false
     property var moleculeProperties: ({})
     property string reactionLabel: "conditions"
     property string arrowKind: "forward"
@@ -45,6 +46,8 @@ ApplicationWindow {
                 boldLines: editor.boldLines
                 onToolSelected: function(tool) { window.activeTool = tool }
                 onGridSnapToggled: function(enabled) { window.gridSnapEnabled = enabled }
+                stereoLabelsVisible: window.stereoLabelsVisible
+                onStereoLabelsToggled: function(visible) { window.stereoLabelsVisible = visible }
                 onUndoRequested: editHistory.undo()
                 onRedoRequested: editHistory.redo()
                 onClearRequested: { editHistory.clearAll(); window.selectedAtom = -1 }
@@ -195,6 +198,7 @@ ApplicationWindow {
                     labelText: window.reactionLabel
                     arrowKind: window.arrowKind
                     gridSnapEnabled: window.gridSnapEnabled
+                    stereoLabelsVisible: window.stereoLabelsVisible
                     onSelectedAtomChangedByCanvas: function(atomId) { window.selectedAtom = atomId }
                     onStatus: function(text) { statusLine.text = text }
                 }

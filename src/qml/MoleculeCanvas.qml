@@ -17,6 +17,8 @@ Rectangle {
     property real panX: 0
     property real panY: 0
     property bool gridSnapEnabled: false
+    property bool stereoLabelsVisible: false
+    onStereoLabelsVisibleChanged: drawing.requestPaint()
     property var atomItems: []
     property var bondItems: []
     property var reactionItems: []
@@ -541,6 +543,18 @@ Rectangle {
                     ctx.lineWidth = 2
                     ctx.beginPath(); ctx.arc(atom.x, atom.y, 16, 0, 2 * Math.PI); ctx.stroke()
                     ctx.strokeStyle = "#121212"; ctx.lineWidth = root.bondWidth
+                }
+            }
+            if (root.stereoLabelsVisible) {
+                const stereo = molecule.stereoDescriptors()
+                ctx.font = "italic 17px sans-serif"
+                ctx.textAlign = "center"; ctx.textBaseline = "middle"
+                for (let s = 0; s < stereo.length; ++s) {
+                    const metrics = ctx.measureText(stereo[s].text)
+                    ctx.fillStyle = "white"
+                    ctx.fillRect(stereo[s].x - metrics.width / 2 - 2, stereo[s].y - 10, metrics.width + 4, 20)
+                    ctx.fillStyle = "#8a1f1f"
+                    ctx.fillText(stereo[s].text, stereo[s].x, stereo[s].y)
                 }
             }
             ctx.restore()

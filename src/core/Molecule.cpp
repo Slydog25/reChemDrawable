@@ -5,6 +5,7 @@
 #include "MolfileReader.h"
 #include "MolfileWriter.h"
 #include "SmilesWriter.h"
+#include "Stereo.h"
 #include "SvgWriter.h"
 
 #include <algorithm>
@@ -1015,6 +1016,17 @@ int Molecule::implicitHydrogens(const Atom &atom) const {
 }
 
 QString Molecule::smiles() const { return SmilesWriter::write(*this); }
+
+QVariantList Molecule::stereoDescriptors() const {
+    QVariantList result;
+    for (const Stereo::Descriptor &d : Stereo::compute(*this)) {
+        result.append(QVariantMap{{QStringLiteral("atomId"), d.atomId}, {QStringLiteral("bondId"), d.bondId},
+                                  {QStringLiteral("kind"), d.atomId >= 0 ? QStringLiteral("atom") : QStringLiteral("bond")},
+                                  {QStringLiteral("label"), d.label}, {QStringLiteral("text"), QStringLiteral("(%1)").arg(d.label)},
+                                  {QStringLiteral("x"), d.x}, {QStringLiteral("y"), d.y}});
+    }
+    return result;
+}
 
 double Molecule::standardBondLength() const { return GeometryEngine::StandardBondLength; }
 

@@ -202,6 +202,15 @@ Canvas {
         case "smiles": page("SMI"); break
 
         // Editing
+        case "stereo": // stereocentre: one wedge, one hashed bond, two plain bonds
+            line(22, 24, 9, 38); line(22, 24, 35, 38)
+            solid([[22, 24], [31, 5], [38, 11]])
+            for (let k = 0; k < 4; ++k) {
+                const t = 0.3 + k * 0.22, w = 1.5 + k * 1.3
+                const cx = 22 - 16 * t, cy = 24 - 16 * t
+                line(cx - w * 0.7, cy + w * 0.7, cx + w * 0.7, cy - w * 0.7)
+            }
+            break
         case "clean": // magic wand
             ctx.lineWidth = 4; line(7, 38, 26, 19); ctx.lineWidth = 3
             sparkle(32, 12, 5); sparkle(19, 8, 3); sparkle(37, 25, 3)

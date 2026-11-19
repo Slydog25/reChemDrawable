@@ -29,4 +29,4 @@ docker run --rm -v "$PWD:/workspace" -w /workspace rechemdraw-qt sh -lc \
 
 ## Current intentional limits
 
-The v1 editor is tap-first: no handwriting recognition, freehand ink, live drag preview, or stereochemistry perception. Formal charges, isotopes, and wedge/dash/wavy bonds are drawn and round-tripped through Molfiles, but stereocenters are not interpreted. Do not introduce a third-party chemistry library without an explicit decision to do so.
+The v1 editor is tap-first: no handwriting recognition, freehand ink, live drag preview, or stereochemistry perception. Formal charges, isotopes, and wedge/dash/wavy bonds are drawn and round-tripped through Molfiles, but the only stereo perception is the optional R/S and E/Z label overlay (`src/core/Stereo.cpp`; CIP rules 1a/1b only, no descriptor when a tie remains). Do not introduce a third-party chemistry library without an explicit decision to do so.

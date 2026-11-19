@@ -7,6 +7,7 @@ Rectangle {
     property string activeTool: "draw"
     property bool gridSnapEnabled: false
     property bool boldLines: false
+    property bool stereoLabelsVisible: false
     signal toolSelected(string tool)
     signal exitRequested()
     signal undoRequested()
@@ -31,6 +32,7 @@ Rectangle {
     signal mirrorRequested(bool horizontal)
     signal alignRequested(string alignment)
     signal gridSnapToggled(bool enabled)
+    signal stereoLabelsToggled(bool visible)
 
     implicitWidth: 252
     color: "#f7f5ed"
@@ -112,6 +114,12 @@ Rectangle {
                 caption: "Snap grid"
                 selected: root.gridSnapEnabled
                 onClicked: root.gridSnapToggled(!root.gridSnapEnabled)
+            }
+            RailButton {
+                iconName: "stereo"
+                caption: "R/S"
+                selected: root.stereoLabelsVisible
+                onClicked: root.stereoLabelsToggled(!root.stereoLabelsVisible)
             }
             RailButton { iconName: "zoomIn"; caption: "Zoom in"; onClicked: root.zoomInRequested() }
             RailButton { iconName: "zoomOut"; caption: "Zoom out"; onClicked: root.zoomOutRequested() }
