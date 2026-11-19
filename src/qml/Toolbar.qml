@@ -94,7 +94,7 @@ Rectangle {
                     ["draw", "draw", "Draw"], ["select", "select", "Select"],
                     ["move", "move", "Move"], ["pan", "pan", "Pan"],
                     ["bond", "bond", "Bond"], ["stereo", "style", "Style"],
-                    ["ring", "ring", "Ring"], ["arrow", "arrow", "Arrow"],
+                    ["ring", "ring", "Ring"], ["chain", "chain", "Chain"], ["arrow", "arrow", "Arrow"],
                     ["label", "text", "Text"], ["erase", "erase", "Erase"]
                 ]
                 delegate: RailButton {

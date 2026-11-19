@@ -124,6 +124,10 @@ Canvas {
             ctx.lineWidth = 3
             break
         case "ring": hexagon(22, 22, 16); break
+        case "chain": // zig-zag with atom dots
+            path([[4, 30], [14, 14], [24, 30], [34, 14], [40, 22]])
+            dot(4, 30, 3); dot(24, 30, 3); dot(34, 14, 3)
+            break
         case "arrow": arrow(4, 22, 40, 22); break
         // Reaction arrow kinds (Arrows row). chev: open barbs at (x, y) along `angle`;
         // side 0 both barbs, +1/-1 one barb (half head).

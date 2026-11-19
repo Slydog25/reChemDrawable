@@ -41,7 +41,8 @@ bool isBondStyle(const QString &style) {
 int ringSides(const QString &templateName) {
     static const QHash<QString, int> sides = {{QStringLiteral("cyclopropane"), 3}, {QStringLiteral("cyclobutane"), 4},
                                                {QStringLiteral("cyclopentane"), 5}, {QStringLiteral("cyclohexane"), 6},
-                                               {QStringLiteral("benzene"), 6}};
+                                               {QStringLiteral("benzene"), 6}, {QStringLiteral("cycloheptane"), 7},
+                                               {QStringLiteral("cyclooctane"), 8}};
     return sides.value(templateName, 0);
 }
 
@@ -535,6 +536,7 @@ QPointF Molecule::suggestedBondEnd(int atomId) const {
 }
 
 bool Molecule::stampRing(const QString &templateName, double x, double y) {
+    if (const GenericRingTemplate *generic = findRingTemplate(templateName)) return stampTemplate(*generic, -1, x, y);
     const int sides = ringSides(templateName);
     if (sides == 0) return false;
     const Snapshot before = snapshot();
@@ -555,6 +557,7 @@ bool Molecule::stampRing(const QString &templateName, double x, double y) {
 }
 
 bool Molecule::stampRingAtAtom(const QString &templateName, int atomId, double x, double y) {
+    if (const GenericRingTemplate *generic = findRingTemplate(templateName)) return stampTemplate(*generic, atomId, x, y);
     const Atom *anchor = findAtom(atomId);
     const int sides = ringSides(templateName);
     if (!anchor || sides == 0) return false;
@@ -590,6 +593,17 @@ bool Molecule::stampRingAtAtom(const QString &templateName, int atomId, double x
 }
 
 bool Molecule::stampRingAtBond(const QString &templateName, int bondId, double x, double y) {
+    if (const GenericRingTemplate *generic = findRingTemplate(templateName)) {
+        // Heterocycles, the chair and indole are not fused onto bonds (which atom
+        // of the template would sit where is not simple); they attach as a
+        // substituent to whichever end of the tapped bond is nearer the tap.
+        const Bond *bond = findBond(bondId);
+        if (!bond) return false;
+        const Atom *a = findAtom(bond->atomA), *b = findAtom(bond->atomB);
+        if (!a || !b) return false;
+        const bool nearA = QLineF(QPointF(x, y), QPointF(a->x, a->y)).length() <= QLineF(QPointF(x, y), QPointF(b->x, b->y)).length();
+        return stampTemplate(*generic, nearA ? a->id : b->id, x, y);
+    }
     Bond *sharedBond = findBond(bondId);
     const int sides = ringSides(templateName);
     if (!sharedBond || sides < 3) return false;
@@ -1012,4 +1026,209 @@ void Molecule::commit(const Snapshot &before) {
     m_redo.clear();
     emit committed();
     emit changed();
+}
+
+// ---- Generic ring templates (heterocycles, chair, indole) --------------------
+
+struct GenericRingTemplate {
+    struct TAtom { QString element; double x, y; };
+    struct TBond { int a, b, order; };
+    QVector<TAtom> atoms;   // local coordinates in bond lengths, centred on the ring
+    QVector<TBond> bonds;
+    QString style = QStringLiteral("plain");
+    int attach = 0;         // the carbon that bonds to the anchor when used as a substituent
+    bool rotates = true;    // regular rings turn to point away from the anchor; chair and indole keep their orientation
+};
+
+namespace {
+constexpr double TemplatePi = 3.14159265358979323846;
+
+// Regular polygon (vertex 0 at the top, clockwise on screen); bond i joins vertex
+// i to i + 1 with orders[i].
+GenericRingTemplate regularTemplate(const QStringList &elements, const QVector<int> &orders, const QString &style, int attach = 0) {
+    GenericRingTemplate ring;
+    const int sides = elements.size();
+    const double radius = 1.0 / (2.0 * qSin(TemplatePi / sides));
+    for (int index = 0; index < sides; ++index) {
+        const double angle = -TemplatePi / 2.0 + 2.0 * TemplatePi * index / sides;
+        ring.atoms.append({elements[index], qCos(angle) * radius, qSin(angle) * radius});
+        ring.bonds.append({index, (index + 1) % sides, orders[index]});
+    }
+    ring.style = style;
+    ring.attach = attach;
+    return ring;
+}
+
+QHash<QString, GenericRingTemplate> buildGenericTemplates() {
+    const auto list = [](const char *symbols) { return QString::fromLatin1(symbols).split(QLatin1Char(' ')); };
+    const QString benzeneStyle = QStringLiteral("benzene"), plain = QStringLiteral("plain");
+    QHash<QString, GenericRingTemplate> t;
+    t.insert(QStringLiteral("pyridine"), regularTemplate(list("C C C N C C"), {2, 1, 2, 1, 2, 1}, benzeneStyle));
+    // C5, C4, N3, C2, N1, C6: the attachment is the 5-position.
+    t.insert(QStringLiteral("pyrimidine"), regularTemplate(list("C C N C N C"), {2, 1, 2, 1, 2, 1}, benzeneStyle));
+    // C2, C3, C4, C5, X1: 2-furyl / 2-thienyl / pyrrol-2-yl. The heteroatom's
+    // hydrogen (pyrrole N-H) is implicit.
+    t.insert(QStringLiteral("furan"), regularTemplate(list("C C C C O"), {2, 1, 2, 1, 1}, plain));
+    t.insert(QStringLiteral("thiophene"), regularTemplate(list("C C C C S"), {2, 1, 2, 1, 1}, plain));
+    t.insert(QStringLiteral("pyrrole"), regularTemplate(list("C C C C N"), {2, 1, 2, 1, 1}, plain));
+    // C5, N1(H), C2, N3, C4: attachment at C5.
+    t.insert(QStringLiteral("imidazole"), regularTemplate(list("C N C N C"), {1, 1, 2, 1, 2}, plain));
+
+    // Textbook chair: a skewed hexagon whose opposite sides are parallel.
+    {
+        GenericRingTemplate chair;
+        const double pts[6][2] = {{0.0, 0.0}, {0.85, -0.5}, {1.85, -0.35}, {2.7, 0.25}, {1.85, 0.75}, {0.85, 0.6}};
+        double cx = 0, cy = 0;
+        for (const auto &p : pts) { cx += p[0] / 6.0; cy += p[1] / 6.0; }
+        for (int index = 0; index < 6; ++index) {
+            chair.atoms.append({QStringLiteral("C"), pts[index][0] - cx, pts[index][1] - cy});
+            chair.bonds.append({index, (index + 1) % 6, 1});
+        }
+        chair.rotates = false;
+        t.insert(QStringLiteral("chair"), chair);
+    }
+
+    // Indole: benzene ring (atoms 0-5) fused to pyrrole (6, 7, 8) on the right.
+    // Local order: 0 C3a, 1 C4, 2 C5, 3 C6, 4 C7, 5 C7a, 6 N1, 7 C2, 8 C3.
+    {
+        GenericRingTemplate indole;
+        const auto polar = [](double cx, double cy, double r, double degrees) {
+            return QPointF(cx + r * qCos(degrees * TemplatePi / 180.0), cy + r * qSin(degrees * TemplatePi / 180.0));
+        };
+        const double radius5 = 1.0 / (2.0 * qSin(TemplatePi / 5.0));
+        const double centre5 = 0.8660254037844386 + 0.5 / qTan(TemplatePi / 5.0);
+        const QPointF pts[9] = {polar(0, 0, 1, -30), polar(0, 0, 1, -90), polar(0, 0, 1, -150), polar(0, 0, 1, 150),
+                                polar(0, 0, 1, 90), polar(0, 0, 1, 30), polar(centre5, 0, radius5, 72),
+                                polar(centre5, 0, radius5, 0), polar(centre5, 0, radius5, -72)};
+        const char *elements[9] = {"C", "C", "C", "C", "C", "C", "N", "C", "C"};
+        for (int index = 0; index < 9; ++index)
+            indole.atoms.append({QString::fromLatin1(elements[index]), pts[index].x() - 0.9, pts[index].y()});
+        // Kekule: C2=C3; C3a=C4, C5=C6, C7=C7a.
+        indole.bonds = {{0, 1, 2}, {1, 2, 1}, {2, 3, 2}, {3, 4, 1}, {4, 5, 2}, {5, 0, 1}, {5, 6, 1}, {6, 7, 1}, {7, 8, 2}, {8, 0, 1}};
+        indole.style = plain;
+        indole.attach = 3; // C6, a benzo CH
+        indole.rotates = false;
+        t.insert(QStringLiteral("indole"), indole);
+    }
+    return t;
+}
+}
+
+const GenericRingTemplate *Molecule::findRingTemplate(const QString &name) {
+    static const QHash<QString, GenericRingTemplate> templates = buildGenericTemplates();
+    const auto it = templates.constFind(name);
+    return it == templates.cend() ? nullptr : &it.value();
+}
+
+bool Molecule::stampTemplate(const GenericRingTemplate &ring, int anchorId, double x, double y) {
+    const double length = GeometryEngine::StandardBondLength;
+    const Atom *anchor = anchorId >= 0 ? findAtom(anchorId) : nullptr;
+    if (anchorId >= 0) {
+        if (!anchor) return false;
+        if (valenceUsed(anchorId) + 1 > maxValence(*anchor)) {
+            emit message(QStringLiteral("That atom has no free valence for a ring substituent."));
+            return false;
+        }
+    }
+
+    QVector<QPointF> points;
+    for (const auto &atom : ring.atoms) points.append(QPointF(atom.x, atom.y) * length);
+    if (anchor) {
+        // The ring's attachment atom goes one bond length out along the direction a
+        // plain tap on the anchor would extend; the ring turns to point away from it.
+        const QPointF origin(anchor->x, anchor->y);
+        const QPointF end = suggestedBondEnd(anchorId);
+        const QPointF attachLocal = points[ring.attach];
+        double rotation = 0.0;
+        if (ring.rotates) {
+            const double wanted = qAtan2(end.y() - origin.y(), end.x() - origin.x());
+            const double inward = qAtan2(-attachLocal.y(), -attachLocal.x()); // attach vertex -> ring centre
+            rotation = wanted - inward;
+        }
+        const auto rotate = [rotation](const QPointF &p) {
+            return QPointF(p.x() * qCos(rotation) - p.y() * qSin(rotation), p.x() * qSin(rotation) + p.y() * qCos(rotation));
+        };
+        const QPointF shift = end - rotate(attachLocal);
+        for (QPointF &p : points) p = rotate(p) + shift;
+    } else {
+        for (QPointF &p : points) p += QPointF(x, y);
+    }
+
+    const Snapshot before = snapshot();
+    QVector<int> ids;
+    for (int index = 0; index < points.size(); ++index) {
+        const int id = m_nextAtomId++;
+        m_atoms.append({id, ring.atoms[index].element, points[index].x(), points[index].y()});
+        ids.append(id);
+    }
+    for (const auto &bond : ring.bonds)
+        m_bonds.append({m_nextBondId++, ids[bond.a], ids[bond.b], bond.order, 0, ring.style});
+    if (anchor) m_bonds.append({m_nextBondId++, anchorId, ids[ring.attach], 1, 0});
+    commit(before);
+    return true;
+}
+
+// ---- Chain tool --------------------------------------------------------------
+
+QVariantList Molecule::chainPoints(int startAtomId, double x, double y, double angle, int count, int firstBendSign) const {
+    QVariantList result;
+    if (count < 1) return result;
+    const double length = GeometryEngine::StandardBondLength;
+    const Atom *start = startAtomId >= 0 ? findAtom(startAtomId) : nullptr;
+    if (startAtomId >= 0 && !start) return result;
+    int sign = firstBendSign < 0 ? -1 : 1;
+    QPointF position = start ? QPointF(start->x, start->y) : QPointF(x, y);
+
+    if (start) {
+        // Keep the first bond clear of bonds the start atom already has.
+        const auto clearance = [&](int candidateSign) {
+            const double direction = qDegreesToRadians(angle + candidateSign * 30.0);
+            double smallest = TemplatePi;
+            for (const Bond &bond : m_bonds) {
+                const int other = bond.atomA == startAtomId ? bond.atomB : bond.atomB == startAtomId ? bond.atomA : -1;
+                const Atom *neighbor = other >= 0 ? findAtom(other) : nullptr;
+                if (!neighbor) continue;
+                const double toNeighbor = qAtan2(neighbor->y - start->y, neighbor->x - start->x);
+                smallest = qMin(smallest, qAbs(qAtan2(qSin(direction - toNeighbor), qCos(direction - toNeighbor))));
+            }
+            return smallest;
+        };
+        const double minimum = qDegreesToRadians(50.0);
+        const double keep = clearance(sign), flip = clearance(-sign);
+        if (keep < minimum && flip > keep) sign = -sign;
+    }
+
+    result.append(QVariantMap{{QStringLiteral("x"), position.x()}, {QStringLiteral("y"), position.y()}});
+    const int bondCount = start ? count : count - 1;
+    for (int index = 0; index < bondCount; ++index) {
+        const double direction = qDegreesToRadians(angle + ((index % 2 == 0) ? sign : -sign) * 30.0);
+        position += QPointF(qCos(direction) * length, qSin(direction) * length);
+        result.append(QVariantMap{{QStringLiteral("x"), position.x()}, {QStringLiteral("y"), position.y()}});
+    }
+    return result;
+}
+
+int Molecule::addChain(int startAtomId, double x, double y, double angle, int count, int firstBendSign) {
+    if (count < 1) return -1;
+    const Atom *start = startAtomId >= 0 ? findAtom(startAtomId) : nullptr;
+    if (startAtomId >= 0) {
+        if (!start) return -1;
+        if (valenceUsed(startAtomId) + 1 > maxValence(*start)) {
+            emit message(QStringLiteral("That atom has no free valence for a chain."));
+            return -1;
+        }
+    }
+    const QVariantList points = chainPoints(startAtomId, x, y, angle, count, firstBendSign);
+    if (points.isEmpty()) return -1;
+    const Snapshot before = snapshot();
+    int previous = startAtomId;
+    for (int index = start ? 1 : 0; index < points.size(); ++index) {
+        const QVariantMap point = points[index].toMap();
+        const int id = m_nextAtomId++;
+        m_atoms.append({id, QStringLiteral("C"), point.value(QStringLiteral("x")).toDouble(), point.value(QStringLiteral("y")).toDouble()});
+        if (previous >= 0) m_bonds.append({m_nextBondId++, previous, id, 1, 0});
+        previous = id;
+    }
+    commit(before);
+    return previous;
 }

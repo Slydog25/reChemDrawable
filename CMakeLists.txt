@@ -132,6 +132,16 @@ if(BUILD_TESTING)
     add_test(NAME interaction_tests COMMAND interaction_tests)
     set_tests_properties(interaction_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+    qt_add_executable(test_templates
+        tests/test_templates.cpp
+        ${CORE_SOURCES}
+        ${CORE_HEADERS}
+    )
+    target_include_directories(test_templates PRIVATE src)
+    target_link_libraries(test_templates PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME test_templates COMMAND test_templates)
+    set_tests_properties(test_templates PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     # QML interaction tests: drive MoleculeCanvas with simulated taps and drags.
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)
     qt_add_executable(qml_tests
