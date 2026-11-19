@@ -98,6 +98,11 @@ void text(QPainter &p, const QString &s, double x, double cy, int anchor, const 
     QPainterPath path;
     path.addText(QPointF(left, baseline), font, s);
     p.save();
+    if (halo > 0) {
+        // Clear the label's box first, as the canvas does: a halo alone leaves the
+        // bond ending at the atom centre visible inside letters like "O".
+        p.fillRect(QRectF(left - 2, cy - (fm.ascent() + fm.descent()) / 2, w + 4, fm.ascent() + fm.descent()), Qt::white);
+    }
     p.setBrush(Qt::NoBrush);
     if (halo > 0) {
         p.setPen(QPen(Qt::white, halo, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));

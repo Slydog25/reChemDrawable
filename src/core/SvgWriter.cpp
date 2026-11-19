@@ -249,6 +249,14 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
             const QString center = display.text.mid(display.centerIndex, display.centerLength);
             const QString after = display.text.mid(display.centerIndex + display.centerLength);
             const QString stroke = QStringLiteral(" stroke=\"white\" stroke-width=\"7\" paint-order=\"stroke\"");
+            // A white box behind the label hides the bond ends at the atom centre, which
+            // the stroke halo alone leaves visible inside letters like "O".
+            {
+                const double left = atom.x - centerWidth / 2 - before.size() * 10.0 - 2;
+                const double right = atom.x + centerWidth / 2 + after.size() * 10.0 + 2;
+                stream << "<rect x=\"" << left << "\" y=\"" << atom.y - 12 << "\" width=\"" << right - left
+                       << "\" height=\"24\" fill=\"white\" stroke=\"none\"/>\n";
+            }
             if (!before.isEmpty())
                 stream << "<text x=\"" << atom.x - centerWidth / 2 << "\" y=\"" << atom.y << "\" text-anchor=\"end\"" << stroke << ">" << escaped(before) << "</text>\n";
             stream << "<text x=\"" << atom.x << "\" y=\"" << atom.y << "\"" << stroke << ">" << escaped(center) << "</text>\n";
