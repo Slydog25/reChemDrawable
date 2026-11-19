@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QTimer>
 #include <QVariantList>
 
 class Molecule;
@@ -15,6 +16,9 @@ class Document : public QObject {
     Q_PROPERTY(QString title READ title NOTIFY stateChanged)
     Q_PROPERTY(bool dirty READ isDirty NOTIFY stateChanged)
     Q_PROPERTY(QString directory READ directory CONSTANT)
+    // True while a change is waiting to be autosaved; the UI can show a hint.
+    Q_PROPERTY(bool autosavePending READ autosavePending NOTIFY autosavePendingChanged)
+    Q_PROPERTY(int autosaveDelayMs READ autosaveDelayMs WRITE setAutosaveDelayMs NOTIFY autosavePendingChanged)
 
 public:
     // An empty directory means Documents/reChemDrawable.
@@ -26,10 +30,21 @@ public:
     QString directory() const;
     QString title() const;
     bool isDirty() const;
+    bool autosavePending() const;
+    int autosaveDelayMs() const;
+    void setAutosaveDelayMs(int milliseconds);
+    static constexpr int DefaultAutosaveDelayMs = 4000;
+    static QString thumbnailPathFor(const QString &documentPath);
 
     Q_INVOKABLE QString currentPath() const;
-    // Drawings in the folder, newest first: {name, path, kind ("scheme"/"molfile"), modified}.
+    // Drawings in the folder, newest first: {name, path, kind ("scheme"/"molfile"), modified,
+    // thumbnail (path of the PNG preview or ""), formula (from the preview, may be "")}.
     Q_INVOKABLE QVariantList documents() const;
+    // Saves now if an autosave is pending (used before closing). Returns true if it saved.
+    Q_INVOKABLE bool flushAutosave();
+    // Deletes a drawing from the folder together with its thumbnail. Deleting the
+    // current drawing keeps its content on the canvas as an unsaved, untitled drawing.
+    Q_INVOKABLE bool deleteDocument(const QString &path);
     // Saves to the current file, or to a new timestamped one for a new drawing.
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool open(const QString &path);
@@ -47,10 +62,16 @@ public:
 
 signals:
     void stateChanged();
+    void autosavePendingChanged();
+    void autosaved();
     void message(const QString &text);
 
 private:
     void markDirty();
+    void scheduleAutosave();
+    void cancelAutosave();
+    void runAutosave();
+    void writeThumbnail(const QString &documentPath) const;
     void setClean(const QString &path);
     QString uniquePath(const QString &baseName, const QString &extension) const;
     QString exportPath(const QString &extension) const;
@@ -62,4 +83,7 @@ private:
     QString m_path;
     bool m_dirty = false;
     bool m_loading = false;
+    // True once the drawing is backed by a real .rcd (saved or opened), so autosave may write it.
+    bool m_hasFile = false;
+    QTimer m_autosaveTimer;
 };

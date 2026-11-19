@@ -25,6 +25,7 @@ set(CORE_SOURCES
     src/core/ReactionLayer.cpp
     src/core/SmilesWriter.cpp
     src/core/SvgWriter.cpp
+    src/core/ThumbnailWriter.cpp
 )
 
 set(PLATFORM_SOURCES
@@ -54,6 +55,7 @@ set(CORE_HEADERS
     src/core/ReactionLayer.h
     src/core/SmilesWriter.h
     src/core/SvgWriter.h
+    src/core/ThumbnailWriter.h
 )
 
 qt_add_executable(reChemDrawable
@@ -90,6 +92,17 @@ if(BUILD_TESTING)
     target_link_libraries(core_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME core_tests COMMAND core_tests)
     set_tests_properties(core_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    # Autosave, thumbnails and Open-list file handling.
+    qt_add_executable(files_tests
+        tests/test_files.cpp
+        ${CORE_SOURCES}
+        ${CORE_HEADERS}
+    )
+    target_include_directories(files_tests PRIVATE src)
+    target_link_libraries(files_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME files_tests COMMAND files_tests)
+    set_tests_properties(files_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     # QML interaction tests: drive MoleculeCanvas with simulated taps and drags.
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)

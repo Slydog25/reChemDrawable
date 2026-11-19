@@ -200,10 +200,13 @@ ApplicationWindow {
     // Quits, first offering to save unsaved changes. Discard means discard: no
     // recovery copy is written on the way out.
     function exitApp() {
+        // A pending autosave counts as saved: write it and quit without asking.
+        document.flushAutosave()
         confirmDiscard(function() { document.discardChanges(); Qt.quit() })
     }
 
     onClosing: function(close) {
+        document.flushAutosave()
         if (!document.dirty) return
         close.accepted = false
         exitApp()
@@ -243,7 +246,8 @@ ApplicationWindow {
         height: Math.min(window.height - 80, 760)
         padding: 20
         property var entries: []
-        onAboutToShow: entries = document.documents()
+        property string confirmingPath: ""
+        onAboutToShow: { confirmingPath = ""; entries = document.documents() }
         contentItem: ColumnLayout {
             spacing: 12
             Label { text: "Open a drawing"; font.pixelSize: 26; font.bold: true }
@@ -260,17 +264,89 @@ ApplicationWindow {
                 clip: true
                 spacing: 8
                 model: openDialog.entries
-                delegate: Button {
+                delegate: Rectangle {
+                    id: entry
+                    objectName: "openEntry"
                     width: ListView.view.width
-                    height: 72
-                    font.pixelSize: 20
-                    text: modelData.name + "    " + modelData.modified + (modelData.kind === "molfile" ? "    .mol" : "")
-                    onClicked: {
-                        const path = modelData.path
-                        openDialog.close()
-                        window.confirmDiscard(function() {
-                            if (document.open(path)) { window.selectedAtom = -1; editor.fitToContent() }
-                        })
+                    height: 112
+                    radius: 6
+                    color: "white"
+                    border.color: "#111"
+                    border.width: 1
+                    readonly property bool confirming: openDialog.confirmingPath === modelData.path
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            const path = modelData.path
+                            openDialog.close()
+                            window.confirmDiscard(function() {
+                                if (document.open(path)) { window.selectedAtom = -1; editor.fitToContent() }
+                            })
+                        }
+                    }
+                    Rectangle {
+                        id: thumbFrame
+                        x: 8; y: 8
+                        width: 144; height: 96
+                        color: "#f4f4f4"
+                        Image {
+                            objectName: "openThumbnail"
+                            anchors.fill: parent
+                            visible: modelData.thumbnail !== ""
+                            source: modelData.thumbnail !== "" ? "file://" + modelData.thumbnail : ""
+                            fillMode: Image.PreserveAspectFit
+                            cache: false
+                            asynchronous: true
+                        }
+                        Label {
+                            anchors.centerIn: parent
+                            visible: modelData.thumbnail === ""
+                            text: modelData.kind === "molfile" ? ".mol" : "no preview"
+                            font.pixelSize: 16
+                            color: "#666"
+                        }
+                    }
+                    Column {
+                        anchors.left: thumbFrame.right
+                        anchors.leftMargin: 14
+                        anchors.right: actions.left
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 4
+                        Label { width: parent.width; text: modelData.name; font.pixelSize: 22; font.bold: true; elide: Text.ElideRight }
+                        Label { width: parent.width; text: modelData.modified + (modelData.kind === "molfile" ? "   .mol" : ""); font.pixelSize: 16; color: "#444"; elide: Text.ElideRight }
+                        Label { width: parent.width; visible: modelData.formula !== ""; text: modelData.formula; font.pixelSize: 16; color: "#444"; elide: Text.ElideRight }
+                    }
+                    Row {
+                        id: actions
+                        anchors.right: parent.right
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
+                        Label { visible: entry.confirming; text: "Delete?"; font.pixelSize: 18; anchors.verticalCenter: parent.verticalCenter }
+                        Button {
+                            objectName: "deleteYes"
+                            visible: entry.confirming
+                            text: "Yes"; font.pixelSize: 18; height: 56
+                            onClicked: {
+                                document.deleteDocument(modelData.path)
+                                openDialog.confirmingPath = ""
+                                openDialog.entries = document.documents()
+                            }
+                        }
+                        Button {
+                            objectName: "deleteNo"
+                            visible: entry.confirming
+                            text: "No"; font.pixelSize: 18; height: 56
+                            onClicked: openDialog.confirmingPath = ""
+                        }
+                        Button {
+                            objectName: "deleteButton"
+                            visible: !entry.confirming
+                            text: "Delete"; font.pixelSize: 18; height: 56
+                            onClicked: openDialog.confirmingPath = modelData.path
+                        }
                     }
                 }
             }
