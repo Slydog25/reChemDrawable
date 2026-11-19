@@ -64,6 +64,9 @@ int main(int argc, char *argv[]) {
     });
     quitPoll.start(100);
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &document, [&document] {
+        // A drawing with a file and a pending autosave just gets saved; only
+        // untitled work (or a failed save) needs a separate recovery copy.
+        document.flushAutosave();
         const QString recovered = document.saveRecoveryCopy();
         if (!recovered.isEmpty()) qWarning() << "Saved unsaved changes to" << recovered;
     });

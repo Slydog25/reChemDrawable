@@ -6,3 +6,4 @@ build-*/
 
 *.tar.gz
 packaging/docker/sdk/
+.claude/
