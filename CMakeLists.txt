@@ -37,6 +37,8 @@ set(PLATFORM_SOURCES
     src/platform/QtfbClient.h
     src/platform/QuitSignals.cpp
     src/platform/QuitSignals.h
+    src/platform/TwoFingerTap.cpp
+    src/platform/TwoFingerTap.h
 )
 
 set(CORE_HEADERS
@@ -79,6 +81,8 @@ if(BUILD_TESTING)
         src/platform/InputRouter.h
         src/platform/PenTool.cpp
         src/platform/PenTool.h
+        src/platform/TwoFingerTap.cpp
+        src/platform/TwoFingerTap.h
         ${CORE_SOURCES}
         ${CORE_HEADERS}
     )

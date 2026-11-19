@@ -7,10 +7,12 @@
 #include "platform/QmlJitWorkaround.h"
 #include "platform/QtfbClient.h"
 #include "platform/QuitSignals.h"
+#include "platform/TwoFingerTap.h"
 
 #include <QGuiApplication>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QLibraryInfo>
 #include <QMouseEvent>
 #include <QPointer>
@@ -88,9 +90,12 @@ int main(int argc, char *argv[]) {
         if (!canvas) qWarning() << "qtfb: canvas not found; finger input will reach it";
         penTool = std::make_unique<PenTool>();
         if (!penTool->available()) qWarning() << "pen eraser: no pen input device found; the eraser end will draw";
-        QObject::connect(&qtfbInput, &QTimer::timeout, &app, [&qtfb, window, canvas, pen = penTool.get()] {
+        QObject::connect(&qtfbInput, &QTimer::timeout, &app, [&qtfb, &editHistory, window, canvas, pen = penTool.get()] {
             static Qt::MouseButtons pressedButtons;
             static InputRouter router;
+            static TwoFingerTap twoFingerTap;
+            static QElapsedTimer clock;
+            if (!clock.isValid()) clock.start();
             static bool eraserStroke = false;
             QtfbInputEvent input;
             if (qtfb.serverHungUp()) {
@@ -126,8 +131,22 @@ int main(int argc, char *argv[]) {
                                        qBound(0, input.y, PaperProHeight - 1));
                 const QRectF canvasArea = canvas ? canvas->mapRectToScene(QRectF(0, 0, canvas->width(), canvas->height()))
                                                  : QRectF();
+                if (isTouch) {
+                    // Two-finger tap anywhere = Undo (not while the pen is down).
+                    const bool tapped = twoFingerTap.feed(input.devId, static_cast<TwoFingerTap::Phase>(phase),
+                                                          position, clock.elapsed());
+                    if (twoFingerTap.fingersDown() >= 2 && router.cancelTouch() && (pressedButtons & Qt::LeftButton)) {
+                        // The first finger had pressed a menu button: release it
+                        // over the canvas instead, which cancels that press.
+                        pressedButtons &= ~Qt::LeftButton;
+                        const QPointF away = canvasArea.isValid() ? canvasArea.center() : QPointF(PaperProWidth / 2.0, PaperProHeight / 2.0);
+                        QMouseEvent cancel(QEvent::MouseButtonRelease, away, away, Qt::LeftButton, pressedButtons, Qt::NoModifier);
+                        QCoreApplication::sendEvent(window, &cancel);
+                    }
+                    if (tapped && !router.penDown()) editHistory.undo();
+                }
                 if (!router.accept(isTouch ? InputRouter::Source::Touch : InputRouter::Source::Pen, phase, position,
-                                   canvasArea, window->property("dialogOpen").toBool()))
+                                   canvasArea, window->property("dialogOpen").toBool(), input.devId))
                     continue;
                 // The eraser end arrives as ordinary pen events; ask the pen which
                 // end is down when a stroke starts and send eraser strokes as the

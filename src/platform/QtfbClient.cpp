@@ -182,6 +182,7 @@ bool QtfbClient::pollInput(QtfbInputEvent &event) {
         return false;
 
     event.type = static_cast<int>(readU32(message + 8));
+    event.devId = static_cast<int>(readU32(message + 12));
     event.x = static_cast<int>(readU32(message + 16));
     event.y = static_cast<int>(readU32(message + 20));
     return true;

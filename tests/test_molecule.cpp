@@ -8,6 +8,7 @@
 #include "core/SvgWriter.h"
 #include "platform/InputRouter.h"
 #include "platform/PenTool.h"
+#include "platform/TwoFingerTap.h"
 
 #include <QLineF>
 #include <QtTest>
@@ -826,6 +827,79 @@ private slots:
         QVERIFY(history.undo());
         QVERIFY(history.undo());
         QCOMPARE(layer.items().size(), 0);
+    }
+    void recognisesTwoFingerTaps() {
+        using Phase = TwoFingerTap::Phase;
+        const QPointF a(500, 900), b(650, 950);
+
+        TwoFingerTap tap;
+        // Quick tap: second finger 80 ms later, both up by 300 ms.
+        QVERIFY(!tap.feed(1, Phase::Press, a, 0));
+        QVERIFY(!tap.feed(2, Phase::Press, b, 80));
+        QVERIFY(!tap.feed(1, Phase::Move, a + QPointF(5, 3), 150));
+        QVERIFY(!tap.feed(1, Phase::Release, a, 250));
+        QCOMPARE(tap.fingersDown(), 1);
+        QVERIFY(tap.feed(2, Phase::Release, b, 300));
+        QCOMPARE(tap.fingersDown(), 0);
+
+        // One finger is not a two-finger tap.
+        QVERIFY(!tap.feed(1, Phase::Press, a, 1000));
+        QVERIFY(!tap.feed(1, Phase::Release, a, 1100));
+
+        // Second finger too late (a finger resting, then another tap).
+        QVERIFY(!tap.feed(1, Phase::Press, a, 2000));
+        QVERIFY(!tap.feed(2, Phase::Press, b, 2400));
+        QVERIFY(!tap.feed(2, Phase::Release, b, 2450));
+        QVERIFY(!tap.feed(1, Phase::Release, a, 2460));
+
+        // Fingers dragged (a pinch or swipe).
+        QVERIFY(!tap.feed(1, Phase::Press, a, 3000));
+        QVERIFY(!tap.feed(2, Phase::Press, b, 3050));
+        QVERIFY(!tap.feed(2, Phase::Move, b + QPointF(60, 0), 3100));
+        QVERIFY(!tap.feed(1, Phase::Release, a, 3200));
+        QVERIFY(!tap.feed(2, Phase::Release, b, 3210));
+
+        // Held too long.
+        QVERIFY(!tap.feed(1, Phase::Press, a, 4000));
+        QVERIFY(!tap.feed(2, Phase::Press, b, 4050));
+        QVERIFY(!tap.feed(1, Phase::Release, a, 4700));
+        QVERIFY(!tap.feed(2, Phase::Release, b, 4710));
+
+        // Three fingers.
+        QVERIFY(!tap.feed(1, Phase::Press, a, 5000));
+        QVERIFY(!tap.feed(2, Phase::Press, b, 5030));
+        QVERIFY(!tap.feed(3, Phase::Press, b + QPointF(100, 0), 5060));
+        QVERIFY(!tap.feed(3, Phase::Release, b, 5150));
+        QVERIFY(!tap.feed(2, Phase::Release, b, 5160));
+        QVERIFY(!tap.feed(1, Phase::Release, a, 5170));
+
+        // A stray release is ignored, and the next tap still works.
+        QVERIFY(!tap.feed(9, Phase::Release, a, 6000));
+        QVERIFY(!tap.feed(1, Phase::Press, a, 6100));
+        QVERIFY(!tap.feed(2, Phase::Press, b, 6120));
+        QVERIFY(!tap.feed(2, Phase::Release, b, 6200));
+        QVERIFY(tap.feed(1, Phase::Release, a, 6210));
+    }
+    void routesOnlyOneFingerAtATime() {
+        using Source = InputRouter::Source;
+        using Phase = InputRouter::Phase;
+        const QRectF canvas(300, 200, 1200, 1800);
+        const QPointF onMenu(100, 400), alsoOnMenu(150, 600);
+        InputRouter router;
+
+        // First finger on the menu drives the app; a second one never does.
+        QVERIFY(router.accept(Source::Touch, Phase::Press, onMenu, canvas, false, 1));
+        QVERIFY(!router.accept(Source::Touch, Phase::Press, alsoOnMenu, canvas, false, 2));
+        QVERIFY(!router.accept(Source::Touch, Phase::Move, alsoOnMenu, canvas, false, 2));
+        // The second finger turns it into a gesture: the first stops being delivered.
+        QVERIFY(router.cancelTouch());
+        QVERIFY(!router.cancelTouch());
+        QVERIFY(!router.accept(Source::Touch, Phase::Move, onMenu, canvas, false, 1));
+        QVERIFY(!router.accept(Source::Touch, Phase::Release, onMenu, canvas, false, 1));
+        QVERIFY(!router.accept(Source::Touch, Phase::Release, alsoOnMenu, canvas, false, 2));
+        // Afterwards a single finger works normally again.
+        QVERIFY(router.accept(Source::Touch, Phase::Press, onMenu, canvas, false, 3));
+        QVERIFY(router.accept(Source::Touch, Phase::Release, onMenu, canvas, false, 3));
     }
     void preservesWavyBondsInMolfiles() {
         Molecule source;

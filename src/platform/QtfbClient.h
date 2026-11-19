@@ -7,6 +7,9 @@
 
 struct QtfbInputEvent {
     int type = 0;
+    // For touch, AppLoad's id for the finger (Qt's touch point id), so several
+    // fingers can be told apart. Always 0 for the pen.
+    int devId = 0;
     int x = 0;
     int y = 0;
 };
