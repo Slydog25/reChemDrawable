@@ -23,6 +23,8 @@ public:
     void present(const QImage &image);
     bool pollInput(QtfbInputEvent &event);
     bool isConnected() const;
+    // True once AppLoad has closed the connection (the user closed the app).
+    bool serverHungUp() const;
 
 private:
     void close();
@@ -33,4 +35,5 @@ private:
     int width_ = 0;
     int height_ = 0;
     QImage lastFrame_;
+    bool serverHungUp_ = false;
 };

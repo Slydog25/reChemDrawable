@@ -5,6 +5,7 @@
 #include "platform/InputRouter.h"
 #include "platform/QmlJitWorkaround.h"
 #include "platform/QtfbClient.h"
+#include "platform/QuitSignals.h"
 
 #include <QGuiApplication>
 #include <QCoreApplication>
@@ -26,11 +27,13 @@ constexpr int PaperProHeight = 2160;
 int main(int argc, char *argv[]) {
     avoidQmlJitOnPointerAuthCpus();
     QGuiApplication app(argc, argv);
-    QQmlApplicationEngine engine;
     Molecule molecule;
     ReactionLayer reactionLayer(&molecule);
     EditHistory editHistory(&molecule, &reactionLayer);
     Document document(&molecule, &reactionLayer);
+    // Declared after the objects it exposes, so it is destroyed first and its
+    // bindings never see them half torn down at exit.
+    QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("molecule"), &molecule);
     engine.rootContext()->setContextProperty(QStringLiteral("reactionLayer"), &reactionLayer);
     engine.rootContext()->setContextProperty(QStringLiteral("editHistory"), &editHistory);
@@ -43,6 +46,19 @@ int main(int argc, char *argv[]) {
     engine.load(QUrl(QStringLiteral("qrc:/src/qml/Main.qml")));
 #endif
     if (engine.rootObjects().isEmpty()) return 1;
+
+    // Closing the app from AppLoad (a signal, or the display connection going
+    // away) can't show the unsaved-changes dialog, so keep a recovery copy.
+    installQuitSignalHandlers();
+    QTimer quitPoll;
+    QObject::connect(&quitPoll, &QTimer::timeout, &app, [] {
+        if (quitSignalReceived()) QCoreApplication::quit();
+    });
+    quitPoll.start(100);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &document, [&document] {
+        const QString recovered = document.saveRecoveryCopy();
+        if (!recovered.isEmpty()) qWarning() << "Saved unsaved changes to" << recovered;
+    });
 
     QtfbClient qtfb;
     QTimer qtfbRefresh;
@@ -67,6 +83,10 @@ int main(int argc, char *argv[]) {
             static Qt::MouseButtons pressedButtons;
             static InputRouter router;
             QtfbInputEvent input;
+            if (qtfb.serverHungUp()) {
+                QCoreApplication::quit();
+                return;
+            }
             while (qtfb.pollInput(input)) {
                 // 0x1n are finger events, 0x2n pen events; n is press/release/move.
                 const bool isTouch = input.type >= 0x10 && input.type <= 0x12;

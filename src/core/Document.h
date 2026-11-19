@@ -38,6 +38,12 @@ public:
     Q_INVOKABLE QString exportMolfile();
     Q_INVOKABLE QString exportSvg();
     Q_INVOKABLE QString exportSmiles();
+    // Saves unsaved work to a new "recovered-<time>.rcd" without changing the
+    // current file; used when the app is closed from outside. Returns the path,
+    // or an empty string when there is nothing unsaved.
+    QString saveRecoveryCopy();
+    // Forgets unsaved changes (the user chose Discard), so nothing is recovered.
+    Q_INVOKABLE void discardChanges();
 
 signals:
     void stateChanged();

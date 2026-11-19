@@ -199,7 +199,8 @@ ApplicationWindow {
     onClosing: function(close) {
         if (!document.dirty) return
         close.accepted = false
-        confirmDiscard(Qt.quit)
+        // Discard means discard: no recovery copy on the way out.
+        confirmDiscard(function() { document.discardChanges(); Qt.quit() })
     }
 
     Popup {

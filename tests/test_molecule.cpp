@@ -711,6 +711,36 @@ private slots:
         QVERIFY(!router.accept(Source::Touch, Phase::Move, onMenu, canvas, false));
         QVERIFY(!router.accept(Source::Touch, Phase::Release, onMenu, canvas, false));
     }
+    void savesRecoveryCopiesOnlyForUnsavedWork() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        Molecule molecule;
+        ReactionLayer layer(&molecule);
+        Document document(&molecule, &layer, directory.path());
+        QVERIFY(document.saveRecoveryCopy().isEmpty());
+
+        molecule.addAtom(0, 0);
+        QVERIFY(document.save());
+        const QString saved = document.currentPath();
+        QVERIFY(document.saveRecoveryCopy().isEmpty());
+
+        molecule.addAtom(48, 0);
+        const QString recovered = document.saveRecoveryCopy();
+        QVERIFY(QFileInfo(recovered).fileName().startsWith("recovered-"));
+        QCOMPARE(document.currentPath(), saved);
+
+        // The recovery copy has the unsaved atom; the saved file does not.
+        Molecule reopened;
+        ReactionLayer reopenedLayer(&reopened);
+        QVERIFY(reopenedLayer.loadFromFile(recovered));
+        QCOMPARE(reopened.atomData().size(), 2);
+        QVERIFY(reopenedLayer.loadFromFile(saved));
+        QCOMPARE(reopened.atomData().size(), 1);
+
+        document.discardChanges();
+        QVERIFY(!document.isDirty());
+        QVERIFY(document.saveRecoveryCopy().isEmpty());
+    }
     void preservesWavyBondsInMolfiles() {
         Molecule source;
         const int a = source.addAtom(0, 0);

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cerrno>
 #include <cstring>
 
 #include <fcntl.h>
@@ -172,7 +173,12 @@ bool QtfbClient::pollInput(QtfbInputEvent &event) {
     // and 20 respectively.
     std::uint8_t message[32] {};
     const ssize_t bytesRead = ::recv(socketFd_, message, sizeof(message), MSG_DONTWAIT);
-    if (bytesRead <= 0 || message[0] != 4 || bytesRead < 24)
+    // On a SEQPACKET socket, 0 means AppLoad closed its end: the app was closed.
+    if (bytesRead == 0 || (bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
+        serverHungUp_ = true;
+        return false;
+    }
+    if (bytesRead < 24 || message[0] != 4)
         return false;
 
     event.type = static_cast<int>(readU32(message + 8));
@@ -180,6 +186,8 @@ bool QtfbClient::pollInput(QtfbInputEvent &event) {
     event.y = static_cast<int>(readU32(message + 20));
     return true;
 }
+
+bool QtfbClient::serverHungUp() const { return serverHungUp_; }
 
 bool QtfbClient::isConnected() const {
     return socketFd_ >= 0 && sharedMemory_ != nullptr;

@@ -33,6 +33,8 @@ set(PLATFORM_SOURCES
     src/platform/QmlJitWorkaround.h
     src/platform/QtfbClient.cpp
     src/platform/QtfbClient.h
+    src/platform/QuitSignals.cpp
+    src/platform/QuitSignals.h
 )
 
 set(CORE_HEADERS

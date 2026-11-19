@@ -121,6 +121,19 @@ QString Document::exportSmiles() {
     return path;
 }
 
+QString Document::saveRecoveryCopy() {
+    if (!m_dirty || !QDir().mkpath(m_directory)) return QString();
+    const QString path = uniquePath(QStringLiteral("recovered-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")),
+                                    QStringLiteral("rcd"));
+    return m_reactions->saveToFile(path) ? path : QString();
+}
+
+void Document::discardChanges() {
+    if (!m_dirty) return;
+    m_dirty = false;
+    emit stateChanged();
+}
+
 void Document::markDirty() {
     if (m_loading || m_dirty) return;
     m_dirty = true;

@@ -10,7 +10,7 @@ if [ -n "${QTFB_KEY:-}" ]; then
     export QT_QUICK_BACKEND=software
 fi
 
-./reChemDrawable >"$app_dir/reChemDrawable.log" 2>&1
-exit_status=$?
-printf 'reChemDrawable exit status: %s\n' "$exit_status" >>"$app_dir/reChemDrawable.log"
-exit "$exit_status"
+# exec replaces this shell with the app, so when AppLoad stops the process it
+# started, it stops the app itself. Running the app as a child left it alive in
+# the background after the window was closed.
+exec ./reChemDrawable >"$app_dir/reChemDrawable.log" 2>&1
