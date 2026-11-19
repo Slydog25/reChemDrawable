@@ -1,10 +1,32 @@
 # reChemDrawable
 
-A tap-first, ChemDraw-style 2D chemical structure editor for reMarkable Paper Pro.
+A pen-first, ChemDraw-style editor for drawing organic structures and reaction schemes on the reMarkable Paper Pro. Draw zig-zag chains, rings and heterocycles, mechanism arrows and conditions with the Marker; erase with its eraser end; save, open, and export to .mol, SMILES, SVG, PNG, PDF and ChemDraw CDXML.
 
-The current milestone is a desktop Qt Quick prototype with a testable C++ molecule core. It deliberately avoids handwriting recognition and live drag rendering. Those are not required to produce clean, editable skeletal structures.
+> **Status: experimental.** The core is covered by automated tests on desktop (run in CI on every push), and the app runs on a Paper Pro with software 3.29.1.0. Several of the newest features (partial e-ink updates, the on-screen keyboard, landscape, Send to library) have not been tried on a tablet yet; see [E-ink display, keyboard and landscape](#e-ink-display-keyboard-and-landscape-appload).
 
-## What works in this foundation
+## Install on a Paper Pro
+
+You need:
+- A reMarkable Paper Pro with **developer mode** enabled (Settings > General > Software > Advanced). reMarkable explains what developer mode means for your device and warranty when you turn it on.
+- [XOVI](https://github.com/asivery/xovi) and [AppLoad](https://github.com/asivery/rm-appload) installed on the tablet. reChemDrawable runs as an AppLoad app.
+- A computer with Docker to build the app (macOS or Linux), and a USB-C cable.
+
+Steps:
+1. **Build** the tablet binary with the official SDK for your tablet's software version: download the "ferrari" toolchain installer from <https://developer.remarkable.com/links> into `packaging/docker/sdk/`, then run `./build-rmpp-docker.sh`. Details: [packaging/docker/README.md](packaging/docker/README.md).
+2. **Connect** the tablet by USB and set up SSH key login once: `ssh-copy-id root@10.11.99.1` (the root password is listed in the tablet's settings under Copyrights and licenses once developer mode is on).
+3. **Deploy**: `./packaging/appload/deploy-appload.sh 10.11.99.1 /home/root/xovi/exthome/appload/reChemDrawable`. This works even while the app is open; the new version starts the next time you open it.
+4. **Open** reChemDrawable from AppLoad. Leave with the **Exit** button (top right), which offers to save first.
+
+Drawings are saved in `Documents/reChemDrawable` on the tablet (`/home/root/Documents/reChemDrawable`), with exports in its `exports/` folder.
+
+## Using it
+
+- **Pen** draws and selects; **fingers** work the menus and dialogs only, so a resting hand never draws. Two-finger tap = Undo, three-finger tap = Redo, two fingers on the canvas pan and pinch-zoom.
+- Tap empty canvas to place a carbon, tap an atom to extend it at the right angle, drag from an atom to place a bond where you want it.
+- Select an atom (Select tool) to change its element, charge, lone pairs or radical in the palette, or to attach a group (**Abbrev…**).
+- The **eraser end** of the Marker erases what it passes over; one stroke undoes in one step.
+
+## Features
 
 - Stable atom and bond IDs, graph editing, hit testing, atom movement, and undo/redo.
 - Element labels (C, H, B, N, O, F, Si, P, S, Cl, Se, Br, I, Li, Na, K, Mg), formal charges, isotopes, single/double/triple/aromatic bonds, and wedge/dash/wavy bond styles.
@@ -51,7 +73,7 @@ From macOS or Linux, with Docker: download the ferrari SDK installer that matche
 
 Inside an already-sourced SDK shell, `./build-rmpp.sh` does the same build directly. It checks that the compiler targets aarch64 Linux and passes the SDK's CMake toolchain file to CMake.
 
-Before deploying, copy the manifest format from the installed AppLoad release into `packaging/appload/external.manifest.json`; AppLoad metadata is community-tool-version-specific and must be validated on the actual device.
+The AppLoad manifest in `packaging/appload/external.manifest.json` was checked against the AppLoad release installed on a tablet with software 3.29.1.0; newer AppLoad releases may change its format.
 
 ## E-ink display, keyboard and landscape (AppLoad)
 
@@ -82,3 +104,11 @@ Drawings live in `reChemDrawable/` inside the platform's Documents folder.
 - **.mol**, **SVG**, and **SMILES** write exports named after the drawing into the `exports/` subfolder.
 
 Files saved by older builds (`structure.mol`, `reaction-scheme.rcd`) appear in the Open list.
+
+## License
+
+[MIT](LICENSE).
+
+## Disclaimer
+
+reChemDrawable is an independent community project. It is not affiliated with, endorsed by, or supported by reMarkable AS or Revvity. reMarkable and Paper Pro are trademarks of reMarkable AS; ChemDraw is a trademark of Revvity, Inc. Use it at your own risk; keep backups of anything important on your tablet.
