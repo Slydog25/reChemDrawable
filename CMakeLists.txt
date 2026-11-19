@@ -19,10 +19,12 @@ set(CORE_SOURCES
     src/core/EditHistory.cpp
     src/core/Elements.cpp
     src/core/GeometryEngine.cpp
+    src/core/Layout2D.cpp
     src/core/Molecule.cpp
     src/core/MolfileReader.cpp
     src/core/MolfileWriter.cpp
     src/core/ReactionLayer.cpp
+    src/core/SmilesReader.cpp
     src/core/SmilesWriter.cpp
     src/core/SvgWriter.cpp
 )
@@ -48,10 +50,12 @@ set(CORE_HEADERS
     src/core/EditHistory.h
     src/core/Elements.h
     src/core/GeometryEngine.h
+    src/core/Layout2D.h
     src/core/Molecule.h
     src/core/MolfileReader.h
     src/core/MolfileWriter.h
     src/core/ReactionLayer.h
+    src/core/SmilesReader.h
     src/core/SmilesWriter.h
     src/core/SvgWriter.h
 )
@@ -90,6 +94,17 @@ if(BUILD_TESTING)
     target_link_libraries(core_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME core_tests COMMAND core_tests)
     set_tests_properties(core_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    # SMILES import: parser, 2D layout, undo, .smi opening.
+    qt_add_executable(smiles_import_tests
+        tests/test_smiles_import.cpp
+        ${CORE_SOURCES}
+        ${CORE_HEADERS}
+    )
+    target_include_directories(smiles_import_tests PRIVATE src)
+    target_link_libraries(smiles_import_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME smiles_import_tests COMMAND smiles_import_tests)
+    set_tests_properties(smiles_import_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     # QML interaction tests: drive MoleculeCanvas with simulated taps and drags.
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)

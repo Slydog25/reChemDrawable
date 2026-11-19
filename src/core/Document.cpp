@@ -3,6 +3,7 @@
 #include "Molecule.h"
 #include "MolfileWriter.h"
 #include "ReactionLayer.h"
+#include "SmilesReader.h"
 #include "SvgWriter.h"
 
 #include <QDateTime>
@@ -34,13 +35,14 @@ QString Document::title() const {
 
 QVariantList Document::documents() const {
     QVariantList result;
-    const QFileInfoList files = QDir(m_directory).entryInfoList({QStringLiteral("*.rcd"), QStringLiteral("*.mol")},
+    const QFileInfoList files = QDir(m_directory).entryInfoList({QStringLiteral("*.rcd"), QStringLiteral("*.mol"), QStringLiteral("*.smi")},
                                                                  QDir::Files, QDir::Time);
     for (const QFileInfo &file : files) {
         result.append(QVariantMap{
             {QStringLiteral("name"), file.completeBaseName()},
             {QStringLiteral("path"), file.absoluteFilePath()},
-            {QStringLiteral("kind"), file.suffix() == QStringLiteral("mol") ? QStringLiteral("molfile") : QStringLiteral("scheme")},
+            {QStringLiteral("kind"), file.suffix() == QStringLiteral("mol") ? QStringLiteral("molfile")
+                : file.suffix() == QStringLiteral("smi") ? QStringLiteral("smiles") : QStringLiteral("scheme")},
             {QStringLiteral("modified"), file.lastModified().toString(QStringLiteral("yyyy-MM-dd HH:mm"))}});
     }
     return result;
@@ -79,8 +81,24 @@ bool Document::open(const QString &path) {
             m_reactions->reset();
             newPath = uniquePath(info.completeBaseName(), QStringLiteral("rcd"));
         }
+    } else if (info.suffix() == QStringLiteral("smi")) {
+        // First token of the first line is the SMILES; it becomes a new untitled drawing.
+        QFile file(path);
+        QString error;
+        QVector<Atom> atoms;
+        QVector<Bond> bonds;
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            emit message(QStringLiteral("Could not read %1.").arg(info.fileName()));
+        } else if (SmilesReader::build(QString::fromUtf8(file.readLine()), 0, 0, atoms, bonds, &error)) {
+            m_molecule->replaceContent(atoms, bonds);
+            m_reactions->reset();
+            newPath = uniquePath(info.completeBaseName(), QStringLiteral("rcd"));
+            loaded = true;
+        } else {
+            emit message(error);
+        }
     } else {
-        emit message(QStringLiteral("Only .rcd and .mol files can be opened."));
+        emit message(QStringLiteral("Only .rcd, .mol and .smi files can be opened."));
     }
     m_loading = false;
     if (!loaded) return false;

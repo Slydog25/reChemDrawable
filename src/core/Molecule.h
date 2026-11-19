@@ -56,6 +56,9 @@ public:
     Q_INVOKABLE bool stampRingAtBond(const QString &templateName, int bondId, double x, double y);
     Q_INVOKABLE bool stampFunctionalGroup(const QString &group, int atomId);
     Q_INVOKABLE bool cleanUpStructure();
+    // Adds the structure for a SMILES string, centred at (x, y), as one undoable
+    // step. On a parse error nothing changes and message() explains why.
+    Q_INVOKABLE bool importSmiles(const QString &smiles, double x, double y);
     Q_INVOKABLE bool canAddBond(int atomA, int atomB, int order = 1) const;
     Q_INVOKABLE QString formula() const;
     Q_INVOKABLE QString smiles() const;

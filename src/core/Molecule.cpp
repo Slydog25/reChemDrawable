@@ -4,6 +4,7 @@
 #include "GeometryEngine.h"
 #include "MolfileReader.h"
 #include "MolfileWriter.h"
+#include "SmilesReader.h"
 #include "SmilesWriter.h"
 #include "SvgWriter.h"
 
@@ -928,6 +929,35 @@ int Molecule::implicitHydrogens(const Atom &atom) const {
 }
 
 QString Molecule::smiles() const { return SmilesWriter::write(*this); }
+
+bool Molecule::importSmiles(const QString &smiles, double x, double y) {
+    QVector<Atom> atoms;
+    QVector<Bond> bonds;
+    QString error;
+    QStringList warnings;
+    if (!SmilesReader::build(smiles, x, y, atoms, bonds, &error, &warnings)) {
+        emit message(error);
+        return false;
+    }
+    const Snapshot before = snapshot();
+    const int atomOffset = m_nextAtomId - 1, bondOffset = m_nextBondId - 1;
+    for (Atom atom : std::as_const(atoms)) {
+        atom.id += atomOffset;
+        m_atoms.append(atom);
+    }
+    for (Bond bond : std::as_const(bonds)) {
+        bond.id += bondOffset;
+        bond.atomA += atomOffset;
+        bond.atomB += atomOffset;
+        m_bonds.append(bond);
+    }
+    m_nextAtomId += atoms.size();
+    m_nextBondId += bonds.size();
+    commit(before);
+    emit message(warnings.isEmpty() ? QStringLiteral("Imported SMILES.")
+                                    : QStringLiteral("Imported SMILES. ") + warnings.join(QLatin1Char(' ')));
+    return true;
+}
 
 double Molecule::standardBondLength() const { return GeometryEngine::StandardBondLength; }
 
