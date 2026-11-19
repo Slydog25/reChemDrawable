@@ -13,7 +13,7 @@ Rectangle {
     property var names: ["draw", "select", "move", "pan", "bond", "style", "ring", "arrow", "text", "erase",
                          "undo", "redo", "grid", "zoomIn", "zoomOut", "fit", "new", "load", "save", "mol",
                          "svg", "smiles", "clean", "rotate", "flipH", "flipV", "alignH", "alignV", "copy",
-                         "paste", "delete", "clear", "exit"]
+                         "paste", "delete", "clear", "exit", "stereo"]
     Grid {
         x: 10; y: 10
         columns: 8

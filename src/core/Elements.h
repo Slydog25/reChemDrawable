@@ -40,4 +40,7 @@ bool isOrganicSubset(const QString &symbol);
 // Elements that may appear lowercase (aromatic) in SMILES.
 bool canBeAromatic(const QString &symbol);
 
+// Atomic number for any element symbol of the periodic table, 0 if unknown.
+int atomicNumber(const QString &symbol);
+
 } // namespace Elements

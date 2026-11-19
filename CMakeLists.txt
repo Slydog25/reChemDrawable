@@ -24,6 +24,7 @@ set(CORE_SOURCES
     src/core/MolfileWriter.cpp
     src/core/ReactionLayer.cpp
     src/core/SmilesWriter.cpp
+    src/core/Stereo.cpp
     src/core/SvgWriter.cpp
 )
 
@@ -53,6 +54,7 @@ set(CORE_HEADERS
     src/core/MolfileWriter.h
     src/core/ReactionLayer.h
     src/core/SmilesWriter.h
+    src/core/Stereo.h
     src/core/SvgWriter.h
 )
 
@@ -90,6 +92,17 @@ if(BUILD_TESTING)
     target_link_libraries(core_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME core_tests COMMAND core_tests)
     set_tests_properties(core_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    # CIP stereodescriptor tests.
+    qt_add_executable(stereo_tests
+        tests/test_stereo.cpp
+        ${CORE_SOURCES}
+        ${CORE_HEADERS}
+    )
+    target_include_directories(stereo_tests PRIVATE src)
+    target_link_libraries(stereo_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME stereo_tests COMMAND stereo_tests)
+    set_tests_properties(stereo_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     # QML interaction tests: drive MoleculeCanvas with simulated taps and drags.
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)

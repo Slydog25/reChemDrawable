@@ -16,6 +16,7 @@ ApplicationWindow {
     property string activeRing: "cyclohexane"
     property int selectedAtom: -1
     property bool gridSnapEnabled: false
+    property bool stereoLabelsVisible: false
     property var moleculeProperties: ({})
     property string reactionLabel: "conditions"
     // Read by main.cpp: while a dialog covers the canvas, a finger may use it.
@@ -43,6 +44,8 @@ ApplicationWindow {
                 gridSnapEnabled: window.gridSnapEnabled
                 onToolSelected: function(tool) { window.activeTool = tool }
                 onGridSnapToggled: function(enabled) { window.gridSnapEnabled = enabled }
+                stereoLabelsVisible: window.stereoLabelsVisible
+                onStereoLabelsToggled: function(visible) { window.stereoLabelsVisible = visible }
                 onUndoRequested: editHistory.undo()
                 onRedoRequested: editHistory.redo()
                 onClearRequested: { editHistory.clearAll(); window.selectedAtom = -1 }
@@ -150,6 +153,7 @@ ApplicationWindow {
                     selectedAtom: window.selectedAtom
                     labelText: window.reactionLabel
                     gridSnapEnabled: window.gridSnapEnabled
+                    stereoLabelsVisible: window.stereoLabelsVisible
                     onSelectedAtomChangedByCanvas: function(atomId) { window.selectedAtom = atomId }
                     onStatus: function(text) { statusLine.text = text }
                 }
