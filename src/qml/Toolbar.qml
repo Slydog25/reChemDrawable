@@ -39,7 +39,9 @@ Rectangle {
     signal propertiesRequested()
     signal cleanScreenRequested()
 
-    implicitWidth: 252
+    // Two columns of buttons in portrait; three in landscape, where height is short.
+    property int columns: 2
+    implicitWidth: columns * 116 + 20
     color: "#f7f5ed"
     border.color: "#171717"
     border.width: 2
@@ -93,7 +95,7 @@ Rectangle {
         Grid {
             id: toolGrid
             width: parent.width
-            columns: 2
+            columns: root.columns
             spacing: 10
 
             Repeater {

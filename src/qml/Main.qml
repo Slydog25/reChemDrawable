@@ -41,7 +41,8 @@ ApplicationWindow {
             spacing: 16
 
             Toolbar {
-                Layout.preferredWidth: 252
+                columns: window.width > window.height ? 3 : 2
+                Layout.preferredWidth: columns === 3 ? 368 : 252
                 Layout.fillHeight: true
                 activeTool: window.activeTool
                 gridSnapEnabled: window.gridSnapEnabled
