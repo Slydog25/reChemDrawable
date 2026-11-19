@@ -20,3 +20,6 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/workspace" -w /workspace rechemdraw-qt sh -lc \
             'QT_QPA_PLATFORM=offscreen timeout 3 ./build-pc/reChemDrawable; test $? -eq 124'
+
+      - name: Closing from outside saves unsaved work
+        run: docker run --rm -v "$PWD:/workspace:ro" rechemdraw-qt /workspace/tools/check-external-quit.sh

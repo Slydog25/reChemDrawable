@@ -54,8 +54,11 @@ int main(int argc, char *argv[]) {
     // away) can't show the unsaved-changes dialog, so keep a recovery copy.
     installQuitSignalHandlers();
     QTimer quitPoll;
+    // exit(), not quit(): in Qt 6 quit() first asks the windows to close, and the
+    // main window refuses while there are unsaved changes (to show its dialog,
+    // which AppLoad has hidden), so the app would never stop.
     QObject::connect(&quitPoll, &QTimer::timeout, &app, [] {
-        if (quitSignalReceived()) QCoreApplication::quit();
+        if (quitSignalReceived()) QCoreApplication::exit(0);
     });
     quitPoll.start(100);
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &document, [&document] {
@@ -91,7 +94,7 @@ int main(int argc, char *argv[]) {
             static bool eraserStroke = false;
             QtfbInputEvent input;
             if (qtfb.serverHungUp()) {
-                QCoreApplication::quit();
+                QCoreApplication::exit(0); // see quitPoll above
                 return;
             }
             while (qtfb.pollInput(input)) {
