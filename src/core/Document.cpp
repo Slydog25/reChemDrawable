@@ -1,8 +1,10 @@
 #include "Document.h"
 
+#include "CdxmlWriter.h"
 #include "Molecule.h"
 #include "MolfileWriter.h"
 #include "ReactionLayer.h"
+#include "SceneRenderer.h"
 #include "SmilesReader.h"
 #include "SvgWriter.h"
 #include "ThumbnailWriter.h"
@@ -13,6 +15,9 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QUuid>
 #include <QStandardPaths>
 
 Document::Document(Molecule *molecule, ReactionLayer *reactions, const QString &directory, QObject *parent)
@@ -228,6 +233,108 @@ QString Document::exportSmiles() {
     if (!writeExport(path, (smiles + QLatin1Char(' ') + title() + QLatin1Char('\n')).toUtf8())) return QString();
     emit message(QStringLiteral("SMILES: %1").arg(smiles));
     return path;
+}
+
+QString Document::exportPng() {
+    const QImage image = SceneRenderer::renderImage(*m_molecule, m_reactions->items());
+    if (image.isNull()) {
+        emit message(QStringLiteral("Draw something before exporting a PNG."));
+        return QString();
+    }
+    const QString path = exportPath(QStringLiteral("png"));
+    if (!QDir().mkpath(QFileInfo(path).absolutePath()) || !image.save(path, "PNG")) {
+        emit message(QStringLiteral("Could not write %1.").arg(path));
+        return QString();
+    }
+    emit message(QStringLiteral("Exported %1 (%2 x %3 px, 300 dpi).").arg(QDir(m_directory).relativeFilePath(path)).arg(image.width()).arg(image.height()));
+    return path;
+}
+
+QString Document::exportPdf() {
+    const QString path = exportPath(QStringLiteral("pdf"));
+    if (!QDir().mkpath(QFileInfo(path).absolutePath()) ||
+        !SceneRenderer::writePdf(path, *m_molecule, m_reactions->items(), title())) {
+        emit message(QStringLiteral("Draw something before exporting a PDF."));
+        return QString();
+    }
+    emit message(QStringLiteral("Exported %1.").arg(QDir(m_directory).relativeFilePath(path)));
+    return path;
+}
+
+QString Document::exportCdxml() {
+    const QString path = exportPath(QStringLiteral("cdxml"));
+    return writeExport(path, CdxmlWriter::write(*m_molecule, m_reactions->items()).toUtf8()) ? path : QString();
+}
+
+QString Document::defaultLibraryDirectory() {
+    const QByteArray override = qgetenv("RECHEMDRAW_LIBRARY_DIR");
+    if (!override.isEmpty()) return QString::fromLocal8Bit(override);
+    return QStringLiteral("/home/root/.local/share/remarkable/xochitl");
+}
+
+// Document layout in xochitl's data folder. NOT verified on a device (none was
+// available); this follows public descriptions of the format:
+//  - one flat folder, files named <uuid>.<ext>: the PDF itself, <uuid>.metadata and
+//    <uuid>.content (reMarkable community filesystem notes, remarkable.guide "Tech >
+//    Filesystem"; rmapi, github.com/juruen/rmapi archive/zipdoc.go and
+//    archive/metadata.go, which write the same two JSON files for an uploaded PDF).
+//  - metadata JSON: visibleName, type "DocumentType", parent "" (root folder; "trash"
+//    is the bin), lastModified in epoch milliseconds as a string, version, deleted,
+//    modified, metadatamodified, pinned, synced.
+//  - content JSON: fileType "pdf" plus pageCount, orientation, margins, textScale,
+//    lineHeight, transform, extraMetadata (rmapi's createZipContent).
+// xochitl scans the folder at start-up, so the document appears after it reloads.
+// The metadata file is written last so a half-written document is never listed.
+// This is the only place that knows the layout; adjust here if firmware differs.
+QString Document::sendToLibrary() {
+    const QDir library(m_libraryDirectory);
+    if (!library.exists()) {
+        emit message(QStringLiteral("reMarkable library folder not found: %1").arg(m_libraryDirectory));
+        return QString();
+    }
+    const QString uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString pdfPath = library.filePath(uuid + QStringLiteral(".pdf"));
+    if (!SceneRenderer::writePdf(pdfPath, *m_molecule, m_reactions->items(), title())) {
+        emit message(QStringLiteral("Draw something before sending it to the reMarkable library."));
+        return QString();
+    }
+    auto writeJson = [&](const QString &extension, const QJsonObject &object) {
+        QFile file(library.filePath(uuid + QLatin1Char('.') + extension));
+        if (!file.open(QIODevice::WriteOnly)) return false;
+        file.write(QJsonDocument(object).toJson(QJsonDocument::Indented));
+        return true;
+    };
+    const QJsonObject identity{{QStringLiteral("m11"), 1}, {QStringLiteral("m12"), 0}, {QStringLiteral("m13"), 0},
+                               {QStringLiteral("m21"), 0}, {QStringLiteral("m22"), 1}, {QStringLiteral("m23"), 0},
+                               {QStringLiteral("m31"), 0}, {QStringLiteral("m32"), 0}, {QStringLiteral("m33"), 1}};
+    const QJsonObject content{{QStringLiteral("extraMetadata"), QJsonObject()},
+                              {QStringLiteral("fileType"), QStringLiteral("pdf")},
+                              {QStringLiteral("lastOpenedPage"), 0},
+                              {QStringLiteral("lineHeight"), -1},
+                              {QStringLiteral("margins"), 180},
+                              {QStringLiteral("orientation"), QStringLiteral("portrait")},
+                              {QStringLiteral("pageCount"), 1},
+                              {QStringLiteral("textScale"), 1},
+                              {QStringLiteral("transform"), identity}};
+    const QJsonObject metadata{{QStringLiteral("deleted"), false},
+                               {QStringLiteral("lastModified"), QString::number(QDateTime::currentMSecsSinceEpoch())},
+                               {QStringLiteral("metadatamodified"), false},
+                               {QStringLiteral("modified"), false},
+                               {QStringLiteral("parent"), QString()},
+                               {QStringLiteral("pinned"), false},
+                               {QStringLiteral("synced"), false},
+                               {QStringLiteral("type"), QStringLiteral("DocumentType")},
+                               {QStringLiteral("version"), 0},
+                               {QStringLiteral("visibleName"), title()}};
+    if (!writeJson(QStringLiteral("content"), content) || !writeJson(QStringLiteral("metadata"), metadata)) {
+        QFile::remove(pdfPath);
+        QFile::remove(library.filePath(uuid + QStringLiteral(".content")));
+        emit message(QStringLiteral("Could not write to the reMarkable library folder."));
+        return QString();
+    }
+    emit message(QStringLiteral("Sent \"%1\" to the reMarkable library. It appears after the tablet's interface (xochitl) reloads: "
+                                "restart the tablet, or run \"systemctl restart xochitl\" over SSH.").arg(title()));
+    return pdfPath;
 }
 
 QString Document::saveRecoveryCopy() {

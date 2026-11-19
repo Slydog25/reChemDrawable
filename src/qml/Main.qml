@@ -21,7 +21,7 @@ ApplicationWindow {
     property string reactionLabel: "conditions"
     property string arrowKind: "forward"
     // Read by main.cpp: while a dialog covers the canvas, a finger may use it.
-    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || elementPalette.popupOpen
+    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || exportDialog.visible || elementPalette.popupOpen
 
     Shortcut { sequences: [StandardKey.Undo]; onActivated: editHistory.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: editHistory.redo() }
@@ -55,9 +55,7 @@ ApplicationWindow {
                 onNewRequested: window.confirmDiscard(function() { document.newDocument(); window.selectedAtom = -1 })
                 onOpenRequested: openDialog.open()
                 onSaveRequested: document.save()
-                onExportMolRequested: document.exportMolfile()
-                onExportSvgRequested: document.exportSvg()
-                onExportSmilesRequested: document.exportSmiles()
+                onExportRequested: exportDialog.open()
                 onZoomInRequested: editor.zoomIn()
                 onZoomOutRequested: editor.zoomOut()
                 onFitRequested: editor.fitToContent()
@@ -305,6 +303,45 @@ ApplicationWindow {
                 Button { text: "Save"; font.pixelSize: 20; Layout.preferredHeight: 60; onClicked: if (document.save()) window.runPendingAction() }
                 Button { text: "Discard"; font.pixelSize: 20; Layout.preferredHeight: 60; onClicked: window.runPendingAction() }
                 Button { text: "Cancel"; font.pixelSize: 20; Layout.preferredHeight: 60; onClicked: discardDialog.close() }
+            }
+        }
+    }
+
+    // One popup for every export format; each button calls the matching Document function.
+    Popup {
+        id: exportDialog
+        objectName: "exportDialog"
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(window.width - 80, 520)
+        padding: 20
+        contentItem: ColumnLayout {
+            spacing: 10
+            Label { text: "Export"; font.pixelSize: 26; font.bold: true }
+            Repeater {
+                model: [{key: "mol", label: "Molfile (.mol)", run: function() { document.exportMolfile() }},
+                        {key: "svg", label: "SVG image", run: function() { document.exportSvg() }},
+                        {key: "smiles", label: "SMILES (.smi)", run: function() { document.exportSmiles() }},
+                        {key: "png", label: "PNG image (300 dpi)", run: function() { document.exportPng() }},
+                        {key: "pdf", label: "PDF (vector)", run: function() { document.exportPdf() }},
+                        {key: "cdxml", label: "ChemDraw (.cdxml)", run: function() { document.exportCdxml() }},
+                        {key: "library", label: "Send to reMarkable library", run: function() { document.sendToLibrary() }}]
+                delegate: Button {
+                    objectName: "export_" + modelData.key
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 64
+                    text: modelData.label
+                    font.pixelSize: 22
+                    onClicked: { exportDialog.close(); modelData.run() }
+                }
+            }
+            Button {
+                objectName: "export_cancel"
+                Layout.fillWidth: true
+                Layout.preferredHeight: 56
+                text: "Cancel"
+                font.pixelSize: 20
+                onClicked: exportDialog.close()
             }
         }
     }

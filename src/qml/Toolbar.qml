@@ -16,6 +16,7 @@ Rectangle {
     signal newRequested()
     signal openRequested()
     signal saveRequested()
+    signal exportRequested()
     signal exportMolRequested()
     signal exportSvgRequested()
     signal exportSmilesRequested()
@@ -127,9 +128,7 @@ Rectangle {
             RailButton { iconName: "new"; caption: "New"; onClicked: root.newRequested() }
             RailButton { iconName: "load"; caption: "Open"; onClicked: root.openRequested() }
             RailButton { iconName: "save"; caption: "Save"; onClicked: root.saveRequested() }
-            RailButton { iconName: "mol"; caption: ".mol"; onClicked: root.exportMolRequested() }
-            RailButton { iconName: "svg"; caption: "SVG"; onClicked: root.exportSvgRequested() }
-            RailButton { iconName: "smiles"; caption: "SMILES"; onClicked: root.exportSmilesRequested() }
+            RailButton { objectName: "exportButton"; iconName: "export"; caption: "Export…"; onClicked: root.exportRequested() }
             RailButton { iconName: "clean"; caption: "Clean"; onClicked: root.cleanupRequested() }
             RailButton { iconName: "rotate"; caption: "Rotate"; onClicked: root.rotateRequested() }
             RailButton { iconName: "flipH"; caption: "Flip H"; onClicked: root.mirrorRequested(true) }

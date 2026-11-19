@@ -53,6 +53,19 @@ public:
     Q_INVOKABLE QString exportMolfile();
     Q_INVOKABLE QString exportSvg();
     Q_INVOKABLE QString exportSmiles();
+    // PNG at 300 dpi equivalent (white background, tight bounds plus margin), a
+    // vector PDF (one page sized to the drawing), and ChemDraw XML.
+    Q_INVOKABLE QString exportPng();
+    Q_INVOKABLE QString exportPdf();
+    Q_INVOKABLE QString exportCdxml();
+    // Writes the drawing as a PDF document into the reMarkable library folder
+    // (<uuid>.pdf + .metadata + .content). It shows up after xochitl reloads; the
+    // app never restarts it. Returns the PDF path, or an empty string on failure.
+    Q_INVOKABLE QString sendToLibrary();
+    // Where xochitl keeps documents; overridable (tests, RECHEMDRAW_LIBRARY_DIR).
+    static QString defaultLibraryDirectory();
+    QString libraryDirectory() const { return m_libraryDirectory; }
+    void setLibraryDirectory(const QString &path) { m_libraryDirectory = path; }
     // Saves unsaved work to a new "recovered-<time>.rcd" without changing the
     // current file; used when the app is closed from outside. Returns the path,
     // or an empty string when there is nothing unsaved.
@@ -80,6 +93,7 @@ private:
     Molecule *m_molecule;
     ReactionLayer *m_reactions;
     QString m_directory;
+    QString m_libraryDirectory = defaultLibraryDirectory();
     QString m_path;
     bool m_dirty = false;
     bool m_loading = false;

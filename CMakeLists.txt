@@ -16,6 +16,8 @@ option(RECHEMDRAW_EXTERNAL_QML "Load QML files from beside the application binar
 
 set(CORE_SOURCES
     src/core/Abbreviations.cpp
+    src/core/CdxmlWriter.cpp
+    src/core/SceneRenderer.cpp
     src/core/Document.cpp
     src/core/EditHistory.cpp
     src/core/Elements.cpp
@@ -34,6 +36,8 @@ set(CORE_SOURCES
 
 set(CORE_HEADERS
     src/core/Abbreviations.h
+    src/core/CdxmlWriter.h
+    src/core/SceneRenderer.h
     src/core/Atom.h
     src/core/Bond.h
     src/core/Document.h
@@ -108,6 +112,7 @@ if(BUILD_TESTING)
     rechemdraw_add_test(test_templates tests/test_templates.cpp)
     rechemdraw_add_test(stereo_tests tests/test_stereo.cpp)      # CIP R/S and E/Z
     rechemdraw_add_test(label_tests tests/test_labels.cpp)
+    rechemdraw_add_test(export_tests tests/test_exports.cpp)     # PNG, PDF, CDXML, reMarkable library
     rechemdraw_add_test(smiles_import_tests tests/test_smiles_import.cpp)  # parser, 2D layout, .smi
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
