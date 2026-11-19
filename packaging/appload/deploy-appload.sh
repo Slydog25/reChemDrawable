@@ -23,17 +23,27 @@ test -x "$binary" || {
     exit 1
 }
 
-# A running binary cannot be overwritten, and copying the rest would leave a
-# mismatched install, so stop before touching anything.
-if ssh -p "$device_port" "root@$device_host" "pidof reChemDrawable >/dev/null"; then
-    echo "reChemDrawable is open on the tablet. Close it there, then deploy again." >&2
-    exit 1
-fi
+remote() { ssh -p "$device_port" "root@$device_host" "$@"; }
 
-ssh -p "$device_port" "root@$device_host" "mkdir -p '$destination'"
-scp -P "$device_port" "$binary" \
+# Upload into a staging folder, then rename each file into place. A rename
+# replaces even a running binary (the open copy keeps its old file), and each
+# file switches over at once, so the app can stay open during a deploy and the
+# next launch always sees a complete new version.
+staging="$destination/.incoming"
+remote "rm -rf '$staging' && mkdir -p '$staging/qml' '$destination/qml'"
+scp -q -P "$device_port" "$binary" \
     "packaging/appload/external.manifest.json" \
     "packaging/appload/reChemDrawable.sh" \
-    "root@$device_host:$destination/"
-scp -P "$device_port" -r "src/qml" "root@$device_host:$destination/"
-ssh -p "$device_port" "root@$device_host" "chmod 755 '$destination/reChemDrawable' '$destination/reChemDrawable.sh'"
+    "root@$device_host:$staging/"
+scp -q -P "$device_port" src/qml/*.qml "root@$device_host:$staging/qml/"
+remote "set -e
+chmod 755 '$staging/reChemDrawable' '$staging/reChemDrawable.sh'
+for file in '$staging'/qml/*.qml; do mv -f \"\$file\" '$destination/qml/'; done
+for file in external.manifest.json reChemDrawable.sh reChemDrawable; do mv -f '$staging'/\$file '$destination/'; done
+rm -rf '$staging'"
+
+echo "Deployed to $device_host:$destination"
+if remote "pidof reChemDrawable >/dev/null"; then
+    echo "Note: reChemDrawable is still running on the tablet (AppLoad can keep a closed app in the" >&2
+    echo "background). It keeps the old version until it is fully quit and opened again." >&2
+fi
