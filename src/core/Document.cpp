@@ -332,8 +332,9 @@ QString Document::sendToLibrary() {
         emit message(QStringLiteral("Could not write to the reMarkable library folder."));
         return QString();
     }
-    emit message(QStringLiteral("Sent \"%1\" to the reMarkable library. It appears after the tablet's interface (xochitl) reloads: "
-                                "restart the tablet, or run \"systemctl restart xochitl\" over SSH.").arg(title()));
+    // Restarting xochitl by hand would bypass XOVI/AppLoad's own start-up, so the
+    // advice is a normal tablet restart.
+    emit message(QStringLiteral("Sent \"%1\" to the reMarkable library. It appears in My files after the tablet restarts.").arg(title()));
     return pdfPath;
 }
 
