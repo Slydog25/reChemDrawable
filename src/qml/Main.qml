@@ -40,7 +40,7 @@ ApplicationWindow {
                 activeTool: window.activeTool
                 touchDrawingEnabled: inputSettings.touchDrawingEnabled
                 gridSnapEnabled: window.gridSnapEnabled
-                onToolSelected: window.activeTool = tool
+                onToolSelected: function(tool) { window.activeTool = tool }
                 onTouchDrawingToggled: function(enabled) { inputSettings.touchDrawingEnabled = enabled }
                 onGridSnapToggled: function(enabled) { window.gridSnapEnabled = enabled }
                 onUndoRequested: editHistory.undo()
@@ -97,15 +97,15 @@ ApplicationWindow {
                 ElementPalette {
                     Layout.fillWidth: true
                     selectedAtom: window.selectedAtom
-                    onElementSelected: molecule.setAtomElement(window.selectedAtom, element)
-                    onChargeRequested: molecule.setAtomCharge(window.selectedAtom, charge)
-                    onGroupRequested: molecule.stampFunctionalGroup(group, window.selectedAtom)
+                    onElementSelected: function(element) { molecule.setAtomElement(window.selectedAtom, element) }
+                    onChargeRequested: function(charge) { molecule.setAtomCharge(window.selectedAtom, charge) }
+                    onGroupRequested: function(group) { molecule.stampFunctionalGroup(group, window.selectedAtom) }
                 }
                 RowLayout {
                     Layout.fillWidth: true
                     RingTemplatePicker {
                         selectedRing: window.activeRing
-                        onRingSelected: { window.activeRing = ring; window.activeTool = "ring" }
+                        onRingSelected: function(ring) { window.activeRing = ring; window.activeTool = "ring" }
                     }
                     Label { text: "Text"; font.pixelSize: 19; font.bold: true }
                     TextField {
@@ -147,8 +147,8 @@ ApplicationWindow {
                     selectedAtom: window.selectedAtom
                     labelText: window.reactionLabel
                     gridSnapEnabled: window.gridSnapEnabled
-                    onSelectedAtomChangedByCanvas: window.selectedAtom = atomId
-                    onStatus: statusLine.text = text
+                    onSelectedAtomChangedByCanvas: function(atomId) { window.selectedAtom = atomId }
+                    onStatus: function(text) { statusLine.text = text }
                 }
             }
         }
