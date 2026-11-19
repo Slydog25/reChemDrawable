@@ -70,6 +70,19 @@ TestCase {
         dialog.close()
     }
 
+    function test_exitAsksFirstWhenThereAreUnsavedChanges() {
+        molecule.addAtom(10, 10)
+        const exitButton = findChild(window, "exitButton")
+        verify(exitButton)
+        const dialog = findChild(window, "discardDialog")
+        exitButton.clicked()
+        tryVerify(function() { return dialog.visible })
+        dialog.close()
+        tryVerify(function() { return !dialog.visible })
+        verify(document.dirty)
+        compare(molecule.atoms().length, 1)
+    }
+
     function test_titleShowsUnsavedMarker() {
         const title = findChild(window, "documentTitle")
         verify(title)

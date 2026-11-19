@@ -46,6 +46,7 @@ ApplicationWindow {
                 onUndoRequested: editHistory.undo()
                 onRedoRequested: editHistory.redo()
                 onClearRequested: { editHistory.clearAll(); window.selectedAtom = -1 }
+                onExitRequested: window.exitApp()
                 onNewRequested: window.confirmDiscard(function() { document.newDocument(); window.selectedAtom = -1 })
                 onOpenRequested: openDialog.open()
                 onSaveRequested: document.save()
@@ -196,11 +197,16 @@ ApplicationWindow {
         if (action) action()
     }
 
+    // Quits, first offering to save unsaved changes. Discard means discard: no
+    // recovery copy is written on the way out.
+    function exitApp() {
+        confirmDiscard(function() { document.discardChanges(); Qt.quit() })
+    }
+
     onClosing: function(close) {
         if (!document.dirty) return
         close.accepted = false
-        // Discard means discard: no recovery copy on the way out.
-        confirmDiscard(function() { document.discardChanges(); Qt.quit() })
+        exitApp()
     }
 
     Popup {

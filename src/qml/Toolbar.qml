@@ -7,6 +7,7 @@ Rectangle {
     property string activeTool: "draw"
     property bool gridSnapEnabled: false
     signal toolSelected(string tool)
+    signal exitRequested()
     signal undoRequested()
     signal redoRequested()
     signal clearRequested()
@@ -128,6 +129,7 @@ Rectangle {
             RailButton { iconName: "paste"; caption: "Paste"; onClicked: root.pasteRequested() }
             RailButton { iconName: "delete"; caption: "Delete"; onClicked: root.deleteSelectionRequested() }
             RailButton { iconName: "clear"; caption: "Clear"; onClicked: root.clearRequested() }
+            RailButton { objectName: "exitButton"; iconName: "exit"; caption: "Exit"; onClicked: root.exitRequested() }
         }
     }
 }

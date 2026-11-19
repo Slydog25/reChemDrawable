@@ -49,7 +49,7 @@ Drawings live in `reChemDrawable/` inside the platform's Documents folder.
 
 - **Save** writes the drawing as an `.rcd` file (the structure plus arrows and labels). A new drawing gets a timestamped name such as `drawing-20261118-1530.rcd`; later saves update that same file. The title bar shows the name, with `•` while there are unsaved changes.
 - **Open** lists the `.rcd` and `.mol` files in that folder, newest first. Opening a `.mol` starts a drawing without annotations, and saving it creates a separate `.rcd`, so the original Molfile is never overwritten.
-- **New**, **Open**, and closing the window ask before discarding unsaved changes.
+- **New**, **Open**, **Exit**, and closing the window ask before discarding unsaved changes. Closing the app from AppLoad's X instead saves unsaved changes as `recovered-<time>.rcd` (it cannot show a dialog there), and those files appear in Open.
 - **.mol**, **SVG**, and **SMILES** write exports named after the drawing into the `exports/` subfolder.
 
 Files saved by older builds (`structure.mol`, `reaction-scheme.rcd`) appear in the Open list.

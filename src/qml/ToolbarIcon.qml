@@ -196,6 +196,10 @@ Canvas {
             line(7, 11, 37, 11); line(17, 6, 27, 6)
             path([[10, 11], [12, 39], [32, 39], [34, 11]], false); line(18, 17, 18, 33); line(26, 17, 26, 33)
             break
+        case "exit": // leave through a door
+            path([[24, 13], [24, 5], [6, 5], [6, 39], [24, 39], [24, 31]], false)
+            arrow(14, 22, 40, 22)
+            break
         case "clear": // empty the canvas
             box(5, 6, 34, 32); line(14, 14, 30, 30); line(30, 14, 14, 30)
             break
