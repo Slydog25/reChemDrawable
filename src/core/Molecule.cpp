@@ -1,5 +1,6 @@
 #include "Molecule.h"
 
+#include "Abbreviations.h"
 #include "Elements.h"
 #include "GeometryEngine.h"
 #include "MolfileReader.h"
@@ -18,11 +19,53 @@
 #include <QtMath>
 
 namespace {
+QString subscriptDigits(const QString &text) {
+    QString result = text;
+    for (QChar &c : result) if (c >= QLatin1Char('0') && c <= QLatin1Char('9')) c = QChar(ushort(0x2080 + (c.unicode() - '0')));
+    return result;
+}
+
+QString superscriptDigits(const QString &text) {
+    static const ushort digits[10] = {0x2070, 0x00B9, 0x00B2, 0x00B3, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079};
+    QString result = text;
+    for (QChar &c : result) if (c >= QLatin1Char('0') && c <= QLatin1Char('9')) c = QChar(digits[c.unicode() - '0']);
+    return result;
+}
+
+double normalizedAngle(double degrees) {
+    while (degrees < 0) degrees += 360.0;
+    while (degrees >= 360.0) degrees -= 360.0;
+    return degrees;
+}
+
+// Picks the middle of the largest gap between the occupied directions (preferring
+// the vertical when gaps tie), and marks it occupied.
+double takeFreeAngle(QVector<double> &occupied) {
+    if (occupied.isEmpty()) { occupied.append(-90.0); return -90.0; }
+    QVector<double> sorted;
+    for (double angle : occupied) sorted.append(normalizedAngle(angle));
+    std::sort(sorted.begin(), sorted.end());
+    double bestMid = 0.0, bestScore = -1.0;
+    for (int index = 0; index < sorted.size(); ++index) {
+        const double start = sorted[index];
+        const double end = index + 1 < sorted.size() ? sorted[index + 1] : sorted.first() + 360.0;
+        const double gap = end - start;
+        const double mid = start + gap / 2.0;
+        const double score = gap + 0.001 * qAbs(qSin(qDegreesToRadians(mid)));
+        if (score > bestScore) { bestScore = score; bestMid = mid; }
+    }
+    bestMid = normalizedAngle(bestMid);
+    if (bestMid > 180.0) bestMid -= 360.0;
+    occupied.append(bestMid);
+    return bestMid;
+}
+
 QVariantMap atomMap(const Atom &atom) {
     return {{QStringLiteral("id"), atom.id}, {QStringLiteral("element"), atom.element},
             {QStringLiteral("x"), atom.x}, {QStringLiteral("y"), atom.y},
             {QStringLiteral("charge"), atom.formalCharge}, {QStringLiteral("isotope"), atom.isotope},
-            {QStringLiteral("radical"), atom.radical}};
+            {QStringLiteral("radical"), atom.radical},
+            {QStringLiteral("lonePairs"), atom.lonePairs}};
 }
 
 QVariantMap bondMap(const Bond &bond) {
@@ -69,7 +112,25 @@ void Molecule::replaceContent(const QVector<Atom> &atoms, const QVector<Bond> &b
 
 QVariantList Molecule::atoms() const {
     QVariantList result;
-    for (const Atom &atom : m_atoms) result.append(atomMap(atom));
+    for (const Atom &atom : m_atoms) {
+        QVariantMap map = atomMap(atom);
+        const AtomDisplay display = atomDisplay(atom);
+        QVariantList lonePairAngles, radicalAngles;
+        for (double angle : display.lonePairAngles) lonePairAngles.append(angle);
+        for (double angle : display.radicalAngles) radicalAngles.append(angle);
+        map.insert(QStringLiteral("showLabel"), display.showLabel);
+        map.insert(QStringLiteral("labelText"), display.text);
+        map.insert(QStringLiteral("centerIndex"), display.centerIndex);
+        map.insert(QStringLiteral("centerLength"), display.centerLength);
+        map.insert(QStringLiteral("labelLeft"), display.labelLeft);
+        map.insert(QStringLiteral("chargeText"), display.chargeText);
+        map.insert(QStringLiteral("chargeLabel"), display.chargeLabel);
+        map.insert(QStringLiteral("lonePairAngles"), lonePairAngles);
+        map.insert(QStringLiteral("radicalAngles"), radicalAngles);
+        map.insert(QStringLiteral("problem"), display.problem);
+        map.insert(QStringLiteral("abbreviation"), Abbreviations::isAbbreviation(atom.element));
+        result.append(map);
+    }
     return result;
 }
 
@@ -155,12 +216,17 @@ bool Molecule::removeBond(int bondId) {
 bool Molecule::setAtomElement(int atomId, const QString &element) {
     Atom *atom = findAtom(atomId);
     const QString normalized = element.trimmed();
-    if (!atom || normalized.isEmpty() || valenceUsed(atomId) > maxValence(normalized, atom->formalCharge)) {
+    if (!atom || normalized.isEmpty() || valenceUsed(atomId) > maxValence(normalized, atom->formalCharge, atom->radical)) {
         emit message(QStringLiteral("That element cannot support the atom's existing bonds."));
         return false;
     }
     const Snapshot before = snapshot();
+    atom = findAtom(atomId); // re-fetch: the snapshot shares storage until the atoms detach
     atom->element = normalized;
+    if (Abbreviations::isAbbreviation(normalized)) {
+        // A group abbreviation carries no charge, isotope, radical, or lone pairs of its own.
+        atom->formalCharge = 0; atom->isotope = 0; atom->radical = 0; atom->lonePairs = 0;
+    }
     commit(before);
     return true;
 }
@@ -168,11 +234,16 @@ bool Molecule::setAtomElement(int atomId, const QString &element) {
 bool Molecule::setAtomCharge(int atomId, int charge) {
     Atom *atom = findAtom(atomId);
     if (!atom || charge < -3 || charge > 3) return false;
-    if (valenceUsed(atomId) > maxValence(atom->element, charge)) {
+    if (Abbreviations::isAbbreviation(atom->element)) {
+        emit message(QStringLiteral("A group abbreviation cannot carry a charge."));
+        return false;
+    }
+    if (valenceUsed(atomId) > maxValence(atom->element, charge, atom->radical)) {
         emit message(QStringLiteral("That charge cannot support the atom's existing bonds."));
         return false;
     }
     const Snapshot before = snapshot();
+    atom = findAtom(atomId); // re-fetch: the snapshot shares storage until the atoms detach
     atom->formalCharge = charge;
     commit(before);
     return true;
@@ -182,9 +253,138 @@ bool Molecule::setAtomIsotope(int atomId, int isotope) {
     Atom *atom = findAtom(atomId);
     if (!atom || isotope < 0 || isotope > 300) return false;
     const Snapshot before = snapshot();
+    atom = findAtom(atomId); // re-fetch: the snapshot shares storage until the atoms detach
     atom->isotope = isotope;
     commit(before);
     return true;
+}
+
+bool Molecule::cycleLonePairs(int atomId) {
+    Atom *atom = findAtom(atomId);
+    if (!atom || Abbreviations::isAbbreviation(atom->element)) return false;
+    const Snapshot before = snapshot();
+    atom = findAtom(atomId); // re-fetch: the snapshot shares storage until the atoms detach
+    atom->lonePairs = (atom->lonePairs + 1) % 4;
+    commit(before);
+    return true;
+}
+
+bool Molecule::cycleRadical(int atomId) {
+    Atom *atom = findAtom(atomId);
+    if (!atom || Abbreviations::isAbbreviation(atom->element)) return false;
+    int next = (atom->radical + 1) % 3;
+    // Each radical electron uses up a bonding site; fall back to none when the bonds no longer fit.
+    if (next > 0 && valenceUsed(atomId) > maxValence(atom->element, atom->formalCharge, next)) {
+        emit message(QStringLiteral("That atom has no free valence for a radical."));
+        next = 0;
+    }
+    const Snapshot before = snapshot();
+    atom = findAtom(atomId); // re-fetch: the snapshot shares storage until the atoms detach
+    atom->radical = next;
+    commit(before);
+    return true;
+}
+
+int Molecule::applyAbbreviation(int atomId, const QString &name) {
+    const Atom *atom = findAtom(atomId);
+    if (!atom || !Abbreviations::isAbbreviation(name)) return -1;
+    int degree = 0;
+    for (const Bond &bond : m_bonds) if (bond.atomA == atomId || bond.atomB == atomId) ++degree;
+    if (atom->element == QStringLiteral("C") && atom->formalCharge == 0 && degree == 1 && valenceUsed(atomId) == 1)
+        return setAtomElement(atomId, name) ? atomId : -1;
+    const QPointF end = suggestedBondEnd(atomId);
+    return extendFromAtom(atomId, end.x(), end.y(), name);
+}
+
+QVariantList Molecule::abbreviationButtons() const {
+    QVariantList result;
+    for (const QString &name : Abbreviations::names())
+        result.append(QVariantMap{{QStringLiteral("name"), name}, {QStringLiteral("label"), subscriptDigits(name)}});
+    return result;
+}
+
+void Molecule::setCircledCharges(bool value) {
+    if (m_circledCharges == value) return;
+    m_circledCharges = value;
+    emit circledChargesChanged();
+    emit changed();
+}
+
+Molecule::AtomDisplay Molecule::atomDisplay(const Atom &atom) const {
+    AtomDisplay display;
+    display.charge = atom.formalCharge;
+    QVector<double> occupied;
+    double sumX = 0.0;
+    int degree = 0, bondSum = 0;
+    for (const Bond &bond : m_bonds) {
+        const int otherId = bond.atomA == atom.id ? bond.atomB : bond.atomB == atom.id ? bond.atomA : -1;
+        if (otherId < 0) continue;
+        ++degree;
+        bondSum += bond.order;
+        const Atom *other = findAtom(otherId);
+        if (!other) continue;
+        const double dx = other->x - atom.x, dy = other->y - atom.y;
+        const double length = qSqrt(dx * dx + dy * dy);
+        if (length < 1e-9) continue;
+        sumX += dx / length;
+        occupied.append(qRadiansToDegrees(qAtan2(dy, dx)));
+    }
+    // Neighbours mostly to the right: write the label right-to-left ("HO", "MeO").
+    const bool neighboursRight = sumX > 0.2;
+    const Abbreviations::Info *group = Abbreviations::find(atom.element);
+    const Elements::Info *known = Elements::find(atom.element);
+    display.problem = bondSum > maxValence(atom) || (!known && !group);
+
+    const int hydrogens = group ? 0 : implicitHydrogens(atom);
+    if (group) {
+        display.showLabel = true;
+        display.centerLength = 1;
+        if (neighboursRight && group->reversed != group->name) {
+            display.text = subscriptDigits(group->reversed);
+            for (int index = group->reversed.size() - 1; index >= 0; --index)
+                if (group->reversed[index].isUpper()) { display.centerIndex = index; break; }
+        } else {
+            display.text = subscriptDigits(group->name);
+            display.centerIndex = neighboursRight ? display.text.size() - 1 : 0;
+        }
+        display.labelLeft = neighboursRight;
+    } else {
+        const bool carbon = atom.element == QStringLiteral("C");
+        display.showLabel = !carbon || atom.isotope > 0 || degree == 0;
+        if (display.showLabel) {
+            const QString isotope = atom.isotope > 0 ? superscriptDigits(QString::number(atom.isotope)) : QString();
+            const QString hydrogenText = hydrogens > 0 ? QStringLiteral("H") + (hydrogens > 1 ? subscriptDigits(QString::number(hydrogens)) : QString()) : QString();
+            display.labelLeft = neighboursRight && hydrogens > 0;
+            display.centerLength = atom.element.size();
+            if (display.labelLeft) {
+                display.text = hydrogenText + isotope + atom.element;
+                display.centerIndex = hydrogenText.size() + isotope.size();
+            } else {
+                display.text = isotope + atom.element + hydrogenText;
+                display.centerIndex = isotope.size();
+            }
+        }
+    }
+    if (atom.formalCharge) {
+        const int magnitude = qAbs(atom.formalCharge);
+        const bool positive = atom.formalCharge > 0;
+        display.chargeText = (magnitude > 1 ? superscriptDigits(QString::number(magnitude)) : QString()) +
+                             (positive ? QString(QChar(0x207A)) : QString(QChar(0x207B)));
+        display.chargeLabel = (magnitude > 1 ? QString::number(magnitude) : QString()) +
+                              (positive ? QStringLiteral("+") : QString(QChar(0x2212)));
+    }
+
+    // Lone pairs and radical dots go in the largest free angular gaps, keeping
+    // clear of the side where the hydrogens or group text extend.
+    if (display.showLabel) {
+        if (degree == 0) { occupied.append(0.0); occupied.append(180.0); }
+        else if (group || hydrogens > 0) occupied.append(display.labelLeft ? 180.0 : 0.0);
+    }
+    if (!group) {
+        for (int index = 0; index < atom.lonePairs; ++index) display.lonePairAngles.append(takeFreeAngle(occupied));
+        for (int index = 0; index < atom.radical; ++index) display.radicalAngles.append(takeFreeAngle(occupied));
+    }
+    return display;
 }
 
 bool Molecule::moveAtom(int atomId, double x, double y) {
@@ -797,6 +997,10 @@ QString Molecule::formula() const {
     // are listed after their element as e.g. "[13C]" or "[2H]".
     QMap<QString, QMap<int, int>> counts;
     for (const Atom &atom : m_atoms) {
+        if (const Abbreviations::Info *group = Abbreviations::find(atom.element)) {
+            for (auto it = group->composition.cbegin(); it != group->composition.cend(); ++it) counts[it.key()][0] += it.value();
+            continue;
+        }
         counts[atom.element][atom.isotope] += 1;
         if (atom.element != QStringLiteral("H")) counts[QStringLiteral("H")][0] += implicitHydrogens(atom);
     }
@@ -825,6 +1029,15 @@ QVariantMap Molecule::properties() const {
     double exactMass = 0.0;
     QStringList unknown;
     for (const Atom &atom : m_atoms) {
+        if (const Abbreviations::Info *group = Abbreviations::find(atom.element)) {
+            for (auto it = group->composition.cbegin(); it != group->composition.cend(); ++it) {
+                if (const Elements::Info *part = Elements::find(it.key())) {
+                    molecularWeight += it.value() * part->averageMass;
+                    exactMass += it.value() * part->monoisotopicMass;
+                }
+            }
+            continue;
+        }
         const Elements::Info *info = Elements::find(atom.element);
         if (!info && !unknown.contains(atom.element)) unknown.append(atom.element);
         // A labelled atom contributes its mass number; that is within ~0.01 Da of
@@ -912,9 +1125,13 @@ const Bond *Molecule::findBond(int id) const { for (const Bond &bond : m_bonds) 
 
 int Molecule::valenceUsed(int atomId) const { int total = 0; for (const Bond &bond : m_bonds) if (bond.atomA == atomId || bond.atomB == atomId) total += bond.order; return total; }
 
-int Molecule::maxValence(const QString &element, int charge) const { return Elements::maxValence(element, charge); }
+int Molecule::maxValence(const QString &element, int charge, int radical) const {
+    // A group abbreviation is attached by exactly one bond.
+    if (Abbreviations::isAbbreviation(element)) return 1;
+    return qMax(0, Elements::maxValence(element, charge) - radical);
+}
 
-int Molecule::maxValence(const Atom &atom) const { return maxValence(atom.element, atom.formalCharge); }
+int Molecule::maxValence(const Atom &atom) const { return maxValence(atom.element, atom.formalCharge, atom.radical); }
 
 int Molecule::implicitHydrogens(const Atom &atom) const {
     // Aromatic-style bonds are stored with order 1 but count 1.5 toward hydrogen
@@ -924,7 +1141,9 @@ int Molecule::implicitHydrogens(const Atom &atom) const {
         if (bond.atomA != atom.id && bond.atomB != atom.id) continue;
         sum += bond.style == QStringLiteral("aromatic") ? 1.5 : bond.order;
     }
-    return Elements::implicitHydrogens(atom.element, atom.formalCharge, qCeil(sum - 1e-9));
+    if (Abbreviations::isAbbreviation(atom.element)) return 0;
+    // Each radical electron stands in for a hydrogen (CH3. has three, not four).
+    return Elements::implicitHydrogens(atom.element, atom.formalCharge, qCeil(sum - 1e-9) + atom.radical);
 }
 
 QString Molecule::smiles() const { return SmilesWriter::write(*this); }

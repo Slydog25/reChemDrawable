@@ -1,5 +1,6 @@
 #include "MolfileWriter.h"
 
+#include "Abbreviations.h"
 #include "GeometryEngine.h"
 #include "Molecule.h"
 
@@ -21,7 +22,7 @@ QString MolfileWriter::writeV2000(const Molecule &molecule, const QString &title
         stream << QString::number(atom.x / GeometryEngine::StandardBondLength, 'f', 4).rightJustified(10)
                << QString::number(-atom.y / GeometryEngine::StandardBondLength, 'f', 4).rightJustified(10)
                << QString::number(0.0, 'f', 4).rightJustified(10)
-               << " " << atom.element.leftJustified(3, ' ') << " 0  0  0  0  0  0  0  0  0  0  0\n";
+               << " " << (Abbreviations::isAbbreviation(atom.element) ? QStringLiteral("R") : atom.element).leftJustified(3, ' ') << " 0  0  0  0  0  0  0  0  0  0  0\n";
     }
     for (const Bond &bond : bonds) {
         const int molfileOrder = bond.style == QStringLiteral("aromatic") ? 4 : bond.order;
@@ -37,7 +38,14 @@ QString MolfileWriter::writeV2000(const Molecule &molecule, const QString &title
                << QString::number(stereo).rightJustified(3) << "  0  0  0\n";
     }
     for (int index = 0; index < atoms.size(); ++index) {
+        // Group abbreviations are "R" atoms with an alias line.
+        if (Abbreviations::isAbbreviation(atoms[index].element))
+            stream << "A  " << QString::number(index + 1).rightJustified(3) << "\n" << atoms[index].element << "\n";
+    }
+    for (int index = 0; index < atoms.size(); ++index) {
         const Atom &atom = atoms[index];
+        if (atom.radical) stream << "M  RAD  1" << QString::number(index + 1).rightJustified(4)
+                                 << QString::number(atom.radical == 1 ? 2 : 3).rightJustified(4) << "\n";
         if (atom.formalCharge) stream << "M  CHG  1" << QString::number(index + 1).rightJustified(4)
                                       << QString::number(atom.formalCharge).rightJustified(4) << "\n";
         if (atom.isotope) stream << "M  ISO  1" << QString::number(index + 1).rightJustified(4)

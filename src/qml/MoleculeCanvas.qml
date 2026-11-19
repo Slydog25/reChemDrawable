@@ -372,21 +372,71 @@ Rectangle {
                 }
             }
             ctx.font = "20px sans-serif"
-            ctx.textAlign = "center"
+            ctx.textAlign = "left"
             ctx.textBaseline = "middle"
             for (let i = 0; i < atomItems.length; ++i) {
                 const atom = atomItems[i]
-                const charge = atom.charge === 1 ? "+" : atom.charge === -1 ? "−" : atom.charge ? Math.abs(atom.charge) + (atom.charge > 0 ? "+" : "−") : ""
-                const label = (atom.isotope > 0 ? atom.isotope : "") + atom.element + charge
-                if (atom.element === "C" && atom.charge === 0 && atom.isotope === 0) {
+                let labelRight = atom.x + 7
+                if (atom.showLabel) {
+                    ctx.font = "20px sans-serif"
+                    ctx.textAlign = "left"
+                    const text = atom.labelText
+                    const before = ctx.measureText(text.substring(0, atom.centerIndex)).width
+                    const center = ctx.measureText(text.substring(atom.centerIndex, atom.centerIndex + atom.centerLength)).width
+                    const total = ctx.measureText(text).width
+                    const left = atom.x - before - center / 2
+                    ctx.fillStyle = "white"
+                    ctx.fillRect(left - 3, atom.y - 14, total + 6, 28)
+                    ctx.fillStyle = root.atomColor(atom.element)
+                    ctx.fillText(text, left, atom.y)
+                    labelRight = left + total + 1
+                } else if (atom.element === "C") {
                     ctx.fillStyle = root.atomColor(atom.element)
                     ctx.beginPath(); ctx.arc(atom.x, atom.y, 4, 0, 2 * Math.PI); ctx.fill()
-                } else {
-                    const metrics = ctx.measureText(label)
-                    ctx.fillStyle = "white"
-                    ctx.fillRect(atom.x - metrics.width / 2 - 4, atom.y - 14, metrics.width + 8, 28)
+                }
+                if (atom.charge !== 0) {
                     ctx.fillStyle = root.atomColor(atom.element)
-                    ctx.fillText(label, atom.x, atom.y)
+                    ctx.strokeStyle = root.atomColor(atom.element)
+                    if (molecule.circledCharges) {
+                        const magnitude = Math.abs(atom.charge)
+                        let cx = labelRight + 6
+                        if (magnitude > 1) {
+                            ctx.font = "12px sans-serif"; ctx.textAlign = "left"
+                            ctx.fillText(String(magnitude), labelRight, atom.y - 14)
+                            cx += 7
+                        }
+                        const cy = atom.y - 12
+                        ctx.lineWidth = 1.5
+                        ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 2 * Math.PI); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(cx - 3.5, cy); ctx.lineTo(cx + 3.5, cy)
+                        if (atom.charge > 0) { ctx.moveTo(cx, cy - 3.5); ctx.lineTo(cx, cy + 3.5) }
+                        ctx.stroke()
+                        ctx.lineWidth = 3
+                    } else {
+                        ctx.font = "bold 15px sans-serif"; ctx.textAlign = "left"
+                        ctx.fillText(atom.chargeLabel, labelRight, atom.y - 11)
+                    }
+                    ctx.font = "20px sans-serif"
+                    ctx.strokeStyle = "#121212"
+                }
+                const dotRadius = atom.showLabel ? 17 : 10
+                ctx.fillStyle = root.atomColor(atom.element)
+                for (let k = 0; k < atom.lonePairAngles.length; ++k) {
+                    const angle = atom.lonePairAngles[k] * Math.PI / 180
+                    const px = atom.x + dotRadius * Math.cos(angle), py = atom.y + dotRadius * Math.sin(angle)
+                    const ox = -Math.sin(angle) * 3.5, oy = Math.cos(angle) * 3.5
+                    ctx.beginPath(); ctx.arc(px + ox, py + oy, 2, 0, 2 * Math.PI); ctx.fill()
+                    ctx.beginPath(); ctx.arc(px - ox, py - oy, 2, 0, 2 * Math.PI); ctx.fill()
+                }
+                for (let k = 0; k < atom.radicalAngles.length; ++k) {
+                    const angle = atom.radicalAngles[k] * Math.PI / 180
+                    ctx.beginPath(); ctx.arc(atom.x + dotRadius * Math.cos(angle), atom.y + dotRadius * Math.sin(angle), 2.5, 0, 2 * Math.PI); ctx.fill()
+                }
+                if (atom.problem) {
+                    ctx.strokeStyle = "#e02020"
+                    ctx.lineWidth = 3
+                    ctx.beginPath(); ctx.arc(atom.x, atom.y, 21, 0, 2 * Math.PI); ctx.stroke()
+                    ctx.strokeStyle = "#121212"; ctx.lineWidth = 3
                 }
                 if (selectedAtoms.indexOf(atom.id) >= 0 || atom.id === selectedAtom) {
                     ctx.strokeStyle = "#756100"

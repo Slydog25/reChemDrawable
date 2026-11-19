@@ -101,10 +101,15 @@ bool ReactionLayer::saveToFile(const QString &path) {
         if (item.type == QStringLiteral("label")) object.insert(QStringLiteral("text"), item.text);
         annotations.append(object);
     }
+    // Lone pairs are not part of Molfiles; store them by atom index.
+    QJsonArray lonePairs;
+    for (const Atom &atom : m_molecule->atomData()) lonePairs.append(atom.lonePairs);
     const QJsonObject document{{QStringLiteral("format"), QStringLiteral("reChemDrawable reaction scheme")},
                                {QStringLiteral("version"), 1},
                                {QStringLiteral("molfile"), MolfileWriter::writeV2000(*m_molecule, info.completeBaseName())},
-                               {QStringLiteral("annotations"), annotations}};
+                               {QStringLiteral("annotations"), annotations},
+                               {QStringLiteral("lonePairs"), lonePairs},
+                               {QStringLiteral("circledCharges"), m_molecule->circledCharges()}};
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly)) return false;
     file.write(QJsonDocument(document).toJson(QJsonDocument::Indented));
@@ -137,7 +142,12 @@ bool ReactionLayer::loadFromFile(const QString &path) {
                             object.value(QStringLiteral("x2")).toDouble(), object.value(QStringLiteral("y2")).toDouble(), object.value(QStringLiteral("text")).toString()});
         nextId = qMax(nextId, id + 1);
     }
-    m_molecule->replaceContent(parsed.atomData(), parsed.bondData());
+    QVector<Atom> parsedAtoms = parsed.atomData();
+    const QJsonArray lonePairs = root.value(QStringLiteral("lonePairs")).toArray();
+    for (int index = 0; index < parsedAtoms.size() && index < lonePairs.size(); ++index)
+        parsedAtoms[index].lonePairs = qBound(0, lonePairs[index].toInt(), 3);
+    m_molecule->setCircledCharges(root.value(QStringLiteral("circledCharges")).toBool(false));
+    m_molecule->replaceContent(parsedAtoms, parsed.bondData());
     m_items = annotations;
     m_nextId = nextId;
     m_undo.clear(); m_redo.clear();

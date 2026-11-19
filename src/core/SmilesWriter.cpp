@@ -1,5 +1,6 @@
 #include "SmilesWriter.h"
 
+#include "Abbreviations.h"
 #include "Elements.h"
 #include "Molecule.h"
 
@@ -42,11 +43,18 @@ public:
         QString result;
         for (const Atom &atom : m_molecule.atomData()) {
             if (m_visited.contains(atom.id)) continue;
+            // A group fragment's trailing characters would attach to its last atom,
+            // so start from a real atom when the component has one.
+            int start = atom.id;
+            if (isAbbreviation(start)) {
+                for (const Edge &edge : m_edges.value(start))
+                    if (!isAbbreviation(edge.neighbor)) { start = edge.neighbor; break; }
+            }
             // Phase 1 finds the spanning tree and ring-closure bonds of this
             // component; phase 2 emits it with ring digits and branches.
-            findTree(atom.id, -1);
+            findTree(start, -1);
             if (!result.isEmpty()) result += '.';
-            writeAtom(atom.id, result);
+            writeAtom(start, result);
         }
         return result;
     }
@@ -67,7 +75,31 @@ private:
         }
     }
 
+    bool isAbbreviation(int atomId) const {
+        return Abbreviations::isAbbreviation(m_molecule.atomData()[m_atomIndex.value(atomId)].element);
+    }
+
+    // An abbreviation that is a component's root (only two linked groups) has its
+    // child attached right after the fragment's first atom (and its ring digits).
+    void writeGroupRoot(int atomId, QString &out) {
+        const QString fragment = atomSymbol(atomId);
+        int split = fragment.startsWith('[') ? fragment.indexOf(']') + 1 : 1;
+        for (;;) {
+            if (split < fragment.size() && fragment[split].isDigit()) ++split;
+            else if (split + 2 < fragment.size() && fragment[split] == '%' && fragment[split + 1].isDigit() && fragment[split + 2].isDigit()) split += 3;
+            else break;
+        }
+        out += fragment.left(split);
+        for (const Edge &child : m_children.value(atomId)) {
+            out += '(' + bondSymbol(child.bondIndex);
+            writeAtom(child.neighbor, out);
+            out += ')';
+        }
+        out += fragment.mid(split);
+    }
+
     void writeAtom(int atomId, QString &out) {
+        if (isAbbreviation(atomId) && !m_children.value(atomId).isEmpty()) { writeGroupRoot(atomId, out); return; }
         out += atomSymbol(atomId);
         for (const Closure &closure : m_closures) {
             if (closure.closer != atomId) continue;
@@ -120,11 +152,12 @@ private:
 
     QString atomSymbol(int atomId) const {
         const Atom &atom = m_molecule.atomData()[m_atomIndex.value(atomId)];
+        if (const Abbreviations::Info *group = Abbreviations::find(atom.element)) return group->smiles;
         const bool aromatic = isAromatic(atomId);
         const QString symbol = aromatic ? atom.element.toLower() : atom.element;
         // Neutral, unlabelled organic-subset atoms imply exactly the hydrogens the
         // editor computes, so they can be written bare.
-        if (Elements::isOrganicSubset(atom.element) && atom.formalCharge == 0 && atom.isotope == 0) return symbol;
+        if (Elements::isOrganicSubset(atom.element) && atom.formalCharge == 0 && atom.isotope == 0 && atom.radical == 0) return symbol;
         QString bracket = QStringLiteral("[");
         if (atom.isotope) bracket += QString::number(atom.isotope);
         bracket += symbol;
