@@ -10,6 +10,8 @@ The current milestone is a desktop Qt Quick prototype with a testable C++ molecu
 - Element labels (C, H, B, N, O, F, Si, P, S, Cl, Se, Br, I, Li, Na, K, Mg), formal charges, isotopes, single/double/triple/aromatic bonds, and wedge/dash/wavy bond styles.
 - Formula (isotope labels shown as e.g. `[13C]`), molecular weight, and exact-mass summaries for the drawn structure.
 - MDL Molfile V2000 read/write with charge, isotope, aromatic, and wedge/dash/wavy preservation, plus SVG and SMILES export.
+- On the tablet the pen draws and selects; a finger only works the menus and dialogs around the canvas, so a resting hand never draws. While the pen is down, finger touches are ignored.
+- Tapping an atom adds a bond at standard skeletal-formula angles: chains zig-zag at 120°, a chain atom branches at 120° to both bonds, ring substituents point straight out, and bonds next to a triple bond continue in a line. Substituent stamps (COOH, NO2, Ph, ...) follow the same direction, and the snap grid's points sit on those angles.
 - A monochrome QML editor with tap-to-place/tap-to-connect editing, drag-to-move, pan, zoom buttons and Fit (plus wheel and pinch zoom on desktop), and common fragment stamps (OH, NH2, Me, COOH, CN, NO2, tBu, and Ph).
 - **Clean** straightens bond lengths and angles: 120° in chains, 180° beside triple bonds, and regular-polygon angles in rings.
 - Box selection, multi-atom move/rotate/mirror/align/delete, and copy/paste of complete selected fragments; desktop builds also accept the standard undo/redo and copy/paste keyboard shortcuts.

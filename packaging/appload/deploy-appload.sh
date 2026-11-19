@@ -23,6 +23,13 @@ test -x "$binary" || {
     exit 1
 }
 
+# A running binary cannot be overwritten, and copying the rest would leave a
+# mismatched install, so stop before touching anything.
+if ssh -p "$device_port" "root@$device_host" "pidof reChemDrawable >/dev/null"; then
+    echo "reChemDrawable is open on the tablet. Close it there, then deploy again." >&2
+    exit 1
+fi
+
 ssh -p "$device_port" "root@$device_host" "mkdir -p '$destination'"
 scp -P "$device_port" "$binary" \
     "packaging/appload/external.manifest.json" \

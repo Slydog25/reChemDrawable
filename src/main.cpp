@@ -2,7 +2,7 @@
 #include "core/EditHistory.h"
 #include "core/Molecule.h"
 #include "core/ReactionLayer.h"
-#include "platform/InputSettings.h"
+#include "platform/InputRouter.h"
 #include "platform/QmlJitWorkaround.h"
 #include "platform/QtfbClient.h"
 
@@ -11,8 +11,10 @@
 #include <QDebug>
 #include <QLibraryInfo>
 #include <QMouseEvent>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QTimer>
 
@@ -29,12 +31,10 @@ int main(int argc, char *argv[]) {
     ReactionLayer reactionLayer(&molecule);
     EditHistory editHistory(&molecule, &reactionLayer);
     Document document(&molecule, &reactionLayer);
-    InputSettings inputSettings;
     engine.rootContext()->setContextProperty(QStringLiteral("molecule"), &molecule);
     engine.rootContext()->setContextProperty(QStringLiteral("reactionLayer"), &reactionLayer);
     engine.rootContext()->setContextProperty(QStringLiteral("editHistory"), &editHistory);
     engine.rootContext()->setContextProperty(QStringLiteral("document"), &document);
-    engine.rootContext()->setContextProperty(QStringLiteral("inputSettings"), &inputSettings);
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
 #ifdef RECHEMDRAW_EXTERNAL_QML
     engine.load(QUrl::fromLocalFile(QCoreApplication::applicationDirPath()
@@ -61,27 +61,30 @@ int main(int argc, char *argv[]) {
         QObject::connect(&qtfbRefresh, &QTimer::timeout, &app, [&qtfb, window] {
             qtfb.present(window->grabWindow());
         });
-        QObject::connect(&qtfbInput, &QTimer::timeout, &app, [&qtfb, &inputSettings, window] {
+        QPointer<QQuickItem> canvas = window->findChild<QQuickItem *>(QStringLiteral("moleculeCanvas"));
+        if (!canvas) qWarning() << "qtfb: canvas not found; finger input will reach it";
+        QObject::connect(&qtfbInput, &QTimer::timeout, &app, [&qtfb, window, canvas] {
             static Qt::MouseButtons pressedButtons;
+            static InputRouter router;
             QtfbInputEvent input;
             while (qtfb.pollInput(input)) {
+                // 0x1n are finger events, 0x2n pen events; n is press/release/move.
                 const bool isTouch = input.type >= 0x10 && input.type <= 0x12;
-                if (isTouch && !inputSettings.touchDrawingEnabled())
-                    continue;
                 QEvent::Type eventType = QEvent::MouseMove;
                 Qt::MouseButton changedButton = Qt::NoButton;
+                InputRouter::Phase phase = InputRouter::Phase::Move;
                 switch (input.type) {
                 case 0x10: // touch press
                 case 0x20: // pen press
                     eventType = QEvent::MouseButtonPress;
                     changedButton = Qt::LeftButton;
-                    pressedButtons |= Qt::LeftButton;
+                    phase = InputRouter::Phase::Press;
                     break;
                 case 0x11: // touch release
                 case 0x21: // pen release
                     eventType = QEvent::MouseButtonRelease;
                     changedButton = Qt::LeftButton;
-                    pressedButtons &= ~Qt::LeftButton;
+                    phase = InputRouter::Phase::Release;
                     break;
                 case 0x12: // touch move
                 case 0x22: // pen move
@@ -91,6 +94,13 @@ int main(int argc, char *argv[]) {
                 }
                 const QPointF position(qBound(0, input.x, PaperProWidth - 1),
                                        qBound(0, input.y, PaperProHeight - 1));
+                const QRectF canvasArea = canvas ? canvas->mapRectToScene(QRectF(0, 0, canvas->width(), canvas->height()))
+                                                 : QRectF();
+                if (!router.accept(isTouch ? InputRouter::Source::Touch : InputRouter::Source::Pen, phase, position,
+                                   canvasArea, window->property("dialogOpen").toBool()))
+                    continue;
+                if (phase == InputRouter::Phase::Press) pressedButtons |= Qt::LeftButton;
+                if (phase == InputRouter::Phase::Release) pressedButtons &= ~Qt::LeftButton;
                 QMouseEvent mouseEvent(eventType, position, position, changedButton,
                                        pressedButtons, Qt::NoModifier);
                 QCoreApplication::sendEvent(window, &mouseEvent);

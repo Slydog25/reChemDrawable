@@ -28,8 +28,8 @@ set(CORE_SOURCES
 )
 
 set(PLATFORM_SOURCES
-    src/platform/InputSettings.cpp
-    src/platform/InputSettings.h
+    src/platform/InputRouter.cpp
+    src/platform/InputRouter.h
     src/platform/QmlJitWorkaround.h
     src/platform/QtfbClient.cpp
     src/platform/QtfbClient.h
@@ -71,6 +71,8 @@ if(BUILD_TESTING)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
     qt_add_executable(core_tests
         tests/test_molecule.cpp
+        src/platform/InputRouter.cpp
+        src/platform/InputRouter.h
         ${CORE_SOURCES}
         ${CORE_HEADERS}
     )
@@ -83,8 +85,6 @@ if(BUILD_TESTING)
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)
     qt_add_executable(qml_tests
         tests/qml_tests.cpp
-        src/platform/InputSettings.cpp
-        src/platform/InputSettings.h
         ${CORE_SOURCES}
         ${CORE_HEADERS}
     )

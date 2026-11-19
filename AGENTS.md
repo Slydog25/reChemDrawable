@@ -22,6 +22,8 @@ docker run --rm -v "$PWD:/workspace" -w /workspace rechemdraw-qt sh -lc \
 - `src/qml/` renders core state and turns interactions into calls on `Molecule`; it must not maintain a second molecule model. UI undo/redo goes through `EditHistory`, which keeps one timeline across `Molecule` and `ReactionLayer`. File handling (current path, unsaved changes, Open list, exports) belongs to `Document`.
 - Element data (valences, charge rules, masses) lives only in `src/core/Elements.cpp`; valence checks, hydrogen counts, formulas, and SMILES all read it.
 - Canvas interaction changes need a case in `tests/qml/tst_canvas.qml`, which drives `MoleculeCanvas` with simulated taps and drags.
+- Tablet input goes through `InputRouter` (`src/platform/`): pen everywhere, finger only outside the canvas (`objectName: "moleculeCanvas"`) or on an open dialog (`dialogOpen` on the window).
+- After changing `src/qml/ToolbarIcon.qml`, render every icon and look at the result: `QT_QPA_PLATFORM=offscreen ./build-pc/qml_tests -input tools/iconsheet` writes `build-pc/icon-sheet.png`.
 - Carbon is stored explicitly but drawn without a label. Canvas coordinates use `GeometryEngine::StandardBondLength`; Molfile coordinates are converted at the serialization boundary.
 - The Paper Pro build must use the official SDK that matches the device firmware. Do not substitute a generic aarch64 build for device validation.
 

@@ -389,36 +389,76 @@ QPointF Molecule::snappedBondEnd(int atomId, double x, double y) const {
 QPointF Molecule::suggestedBondEnd(int atomId) const {
     const Atom *atom = findAtom(atomId);
     if (!atom) return QPointF();
+    constexpr double Pi = 3.14159265358979323846;
+    const double length = GeometryEngine::StandardBondLength;
+    const QPointF origin(atom->x, atom->y);
+    const auto pointAt = [&origin, length](double angle) {
+        return origin + QPointF(qCos(angle) * length, qSin(angle) * length);
+    };
+    const auto angleBetween = [](const Atom &from, const Atom &to) { return qAtan2(to.y - from.y, to.x - from.x); };
+    const auto difference = [](double a, double b) { return qAbs(qAtan2(qSin(a - b), qCos(a - b))); };
+    const auto occupied = [this, length](const QPointF &point) {
+        for (const Atom &other : m_atoms)
+            if (QLineF(point, QPointF(other.x, other.y)).length() < 0.5 * length) return true;
+        return false;
+    };
 
-    QVector<double> occupiedAngles;
+    QVector<const Atom *> neighbors;
+    bool linear = false;
+    int doubleBonds = 0;
     for (const Bond &bond : m_bonds) {
         const int neighborId = bond.atomA == atomId ? bond.atomB : bond.atomB == atomId ? bond.atomA : -1;
-        const Atom *neighbor = findAtom(neighborId);
-        if (!neighbor) continue;
-        occupiedAngles.append(qAtan2(neighbor->y - atom->y, neighbor->x - atom->x));
+        if (const Atom *neighbor = findAtom(neighborId)) {
+            neighbors.append(neighbor);
+            if (bond.order == 3) linear = true;
+            if (bond.order == 2) ++doubleBonds;
+        }
     }
-    if (occupiedAngles.isEmpty()) {
-        return QPointF(atom->x + GeometryEngine::StandardBondLength, atom->y);
+    if (doubleBonds >= 2) linear = true; // allene / cumulene centre
+
+    // A lone atom starts a chain up and to the right, ChemDraw style.
+    if (neighbors.isEmpty()) return pointAt(-Pi / 6.0);
+
+    if (neighbors.size() == 1) {
+        const Atom &neighbor = *neighbors.first();
+        const double forward = angleBetween(neighbor, *atom);
+        if (linear) return pointAt(forward);
+        // sp2/sp3 chain atom: the new bond leaves at 120 degrees to the existing one.
+        const double candidates[2] = {forward - Pi / 3.0, forward + Pi / 3.0};
+        int choice = 0;
+        // Zig-zag: run parallel to the bond that leads into the neighbour, so the
+        // chain keeps alternating instead of curling back on itself.
+        const Atom *previous = nullptr;
+        for (const Bond &bond : m_bonds) {
+            const int otherId = bond.atomA == neighbor.id ? bond.atomB : bond.atomB == neighbor.id ? bond.atomA : -1;
+            if (otherId >= 0 && otherId != atomId) { previous = findAtom(otherId); if (previous) break; }
+        }
+        if (previous) {
+            const double reference = angleBetween(*previous, neighbor);
+            choice = difference(candidates[0], reference) <= difference(candidates[1], reference) ? 0 : 1;
+        } else {
+            // Two-atom chain: bend the opposite way vertically from the first bond
+            // (upward when that bond is horizontal).
+            const double rise = qSin(forward);
+            if (qAbs(rise) < 1e-6) choice = qSin(candidates[0]) < 0 ? 0 : 1;
+            else choice = (qSin(candidates[0]) > 0) == (rise < 0) ? 0 : 1;
+        }
+        if (occupied(pointAt(candidates[choice])) && !occupied(pointAt(candidates[1 - choice]))) choice = 1 - choice;
+        return pointAt(candidates[choice]);
     }
 
-    constexpr int CandidateCount = 12;
-    constexpr double Pi = 3.14159265358979323846;
-    double bestAngle = 0.0;
-    double bestClearance = -1.0;
-    for (int candidate = 0; candidate < CandidateCount; ++candidate) {
-        const double angle = candidate * 2.0 * Pi / CandidateCount;
-        double clearance = 2.0 * Pi;
-        for (const double occupied : occupiedAngles) {
-            const double difference = qAbs(qAtan2(qSin(angle - occupied), qCos(angle - occupied)));
-            clearance = qMin(clearance, difference);
-        }
-        if (clearance > bestClearance) {
-            bestClearance = clearance;
-            bestAngle = angle;
-        }
+    // Two or more bonds: the middle of the widest gap between them. That is 120
+    // degrees from both bonds of a chain atom, and straight out of a ring.
+    QVector<double> angles;
+    for (const Atom *neighbor : neighbors) angles.append(angleBetween(*atom, *neighbor));
+    std::sort(angles.begin(), angles.end());
+    double bestGap = -1.0, bestAngle = 0.0;
+    for (int index = 0; index < angles.size(); ++index) {
+        const double start = angles[index];
+        const double next = index + 1 < angles.size() ? angles[index + 1] : angles.first() + 2.0 * Pi;
+        if (next - start > bestGap) { bestGap = next - start; bestAngle = start + (next - start) / 2.0; }
     }
-    return QPointF(atom->x + qCos(bestAngle) * GeometryEngine::StandardBondLength,
-                   atom->y + qSin(bestAngle) * GeometryEngine::StandardBondLength);
+    return pointAt(bestAngle);
 }
 
 bool Molecule::stampRing(const QString &templateName, double x, double y) {
@@ -530,14 +570,28 @@ bool Molecule::stampRingAtBond(const QString &templateName, int bondId, double x
 }
 
 bool Molecule::stampFunctionalGroup(const QString &group, int atomId) {
-    Atom *anchor = findAtom(atomId);
+    const Atom *anchor = findAtom(atomId);
     if (!anchor) return false;
     if (valenceUsed(atomId) + 1 > maxValence(*anchor)) {
         emit message(QStringLiteral("That atom has no free valence for a substituent."));
         return false;
     }
+    static const QStringList groups = {QStringLiteral("OH"), QStringLiteral("NH2"), QStringLiteral("Me"), QStringLiteral("COOH"),
+                                       QStringLiteral("CN"), QStringLiteral("NO2"), QStringLiteral("tBu"), QStringLiteral("Ph")};
+    if (!groups.contains(group)) return false;
+
+    // Each group is laid out in a local frame where +x is the new bond's direction
+    // (the same one a tap on the atom would use) and lengths are in bond lengths,
+    // then rotated into place.
+    const double length = GeometryEngine::StandardBondLength;
+    const QPointF origin(anchor->x, anchor->y);
+    const QPointF end = suggestedBondEnd(atomId);
+    const QPointF along = (end - origin) / length;
+    const QPointF across(-along.y(), along.x());
+    const auto place = [&](double x, double y) { return origin + along * (x * length) + across * (y * length); };
+    const double sin60 = 0.8660254037844386;
+
     const Snapshot before = snapshot();
-    const QPointF firstPoint(anchor->x + GeometryEngine::StandardBondLength, anchor->y);
     const auto appendAtom = [this](const QString &element, const QPointF &point) {
         const int id = m_nextAtomId++;
         m_atoms.append({id, element, point.x(), point.y()});
@@ -545,50 +599,48 @@ bool Molecule::stampFunctionalGroup(const QString &group, int atomId) {
     };
     const auto appendBond = [this](int a, int b, int order) { m_bonds.append({m_nextBondId++, a, b, order, 0}); };
     if (group == QStringLiteral("OH")) {
-        appendBond(atomId, appendAtom(QStringLiteral("O"), firstPoint), 1);
+        appendBond(atomId, appendAtom(QStringLiteral("O"), place(1, 0)), 1);
     } else if (group == QStringLiteral("NH2")) {
-        appendBond(atomId, appendAtom(QStringLiteral("N"), firstPoint), 1);
+        appendBond(atomId, appendAtom(QStringLiteral("N"), place(1, 0)), 1);
     } else if (group == QStringLiteral("Me")) {
-        appendBond(atomId, appendAtom(QStringLiteral("C"), firstPoint), 1);
-    } else if (group == QStringLiteral("COOH")) {
-        const int carbon = appendAtom(QStringLiteral("C"), firstPoint);
-        const int oxygen1 = appendAtom(QStringLiteral("O"), firstPoint + QPointF(0, -GeometryEngine::StandardBondLength));
-        const int oxygen2 = appendAtom(QStringLiteral("O"), firstPoint + QPointF(0, GeometryEngine::StandardBondLength));
-        appendBond(atomId, carbon, 1);
-        appendBond(carbon, oxygen1, 2);
-        appendBond(carbon, oxygen2, 1);
+        appendBond(atomId, appendAtom(QStringLiteral("C"), place(1, 0)), 1);
+    } else if (group == QStringLiteral("COOH") || group == QStringLiteral("NO2")) {
+        // Trigonal centre: both oxygens at 120 degrees to the bond back to the anchor.
+        const bool nitro = group == QStringLiteral("NO2");
+        const int center = appendAtom(nitro ? QStringLiteral("N") : QStringLiteral("C"), place(1, 0));
+        const int doubleOxygen = appendAtom(QStringLiteral("O"), place(1.5, -sin60));
+        const int singleOxygen = appendAtom(QStringLiteral("O"), place(1.5, sin60));
+        appendBond(atomId, center, 1);
+        appendBond(center, doubleOxygen, 2);
+        appendBond(center, singleOxygen, 1);
+        if (nitro) {
+            // Nitro is N+(=O)O-; without the charges nitrogen would carry four bonds
+            // past its neutral valence limit.
+            findAtom(center)->formalCharge = 1;
+            findAtom(singleOxygen)->formalCharge = -1;
+        }
     } else if (group == QStringLiteral("CN")) {
-        const int carbon = appendAtom(QStringLiteral("C"), firstPoint);
-        const int nitrogen = appendAtom(QStringLiteral("N"), firstPoint + QPointF(GeometryEngine::StandardBondLength, 0));
+        // Nitrile carbon is sp: C and N continue in a straight line.
+        const int carbon = appendAtom(QStringLiteral("C"), place(1, 0));
+        const int nitrogen = appendAtom(QStringLiteral("N"), place(2, 0));
         appendBond(atomId, carbon, 1);
         appendBond(carbon, nitrogen, 3);
-    } else if (group == QStringLiteral("NO2")) {
-        const int nitrogen = appendAtom(QStringLiteral("N"), firstPoint);
-        const int oxygen1 = appendAtom(QStringLiteral("O"), firstPoint + QPointF(GeometryEngine::StandardBondLength, -GeometryEngine::StandardBondLength));
-        const int oxygen2 = appendAtom(QStringLiteral("O"), firstPoint + QPointF(GeometryEngine::StandardBondLength, GeometryEngine::StandardBondLength));
-        appendBond(atomId, nitrogen, 1);
-        appendBond(nitrogen, oxygen1, 2);
-        appendBond(nitrogen, oxygen2, 1);
-        // Nitro is N+(=O)O-; without the charges nitrogen would carry four bonds
-        // past its neutral valence limit.
-        findAtom(nitrogen)->formalCharge = 1;
-        findAtom(oxygen2)->formalCharge = -1;
     } else if (group == QStringLiteral("tBu")) {
-        const int center = appendAtom(QStringLiteral("C"), firstPoint);
+        // Quaternary carbon drawn as a cross: methyls ahead and to either side.
+        const int center = appendAtom(QStringLiteral("C"), place(1, 0));
         appendBond(atomId, center, 1);
-        const QVector<QPointF> branches = {firstPoint + QPointF(GeometryEngine::StandardBondLength, 0),
-                                           firstPoint + QPointF(-24, -42), firstPoint + QPointF(-24, 42)};
-        for (const QPointF &point : branches) appendBond(center, appendAtom(QStringLiteral("C"), point), 1);
+        for (const QPointF &point : {place(2, 0), place(1, -1), place(1, 1)})
+            appendBond(center, appendAtom(QStringLiteral("C"), point), 1);
     } else if (group == QStringLiteral("Ph")) {
-        const QVector<QPointF> points = GeometryEngine::regularPolygon(firstPoint + QPointF(GeometryEngine::StandardBondLength, 0), 6,
-                                                                         GeometryEngine::StandardBondLength, 180.0);
+        // Ring centre two bond lengths out, ipso carbon pointing back at the anchor.
         QVector<int> phenyl;
-        for (const QPointF &point : points) phenyl.append(appendAtom(QStringLiteral("C"), point));
+        for (int index = 0; index < 6; ++index) {
+            const double angle = 3.14159265358979323846 * (1.0 + index / 3.0);
+            phenyl.append(appendAtom(QStringLiteral("C"), place(2 + qCos(angle), qSin(angle))));
+        }
         appendBond(atomId, phenyl.first(), 1);
         for (int index = 0; index < phenyl.size(); ++index)
             appendBond(phenyl[index], phenyl[(index + 1) % phenyl.size()], index % 2 == 0 ? 2 : 1);
-    } else {
-        return false;
     }
     commit(before);
     return true;

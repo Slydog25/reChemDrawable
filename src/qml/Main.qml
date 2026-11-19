@@ -18,6 +18,8 @@ ApplicationWindow {
     property bool gridSnapEnabled: false
     property var moleculeProperties: ({})
     property string reactionLabel: "conditions"
+    // Read by main.cpp: while a dialog covers the canvas, a finger may use it.
+    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible
 
     Shortcut { sequences: [StandardKey.Undo]; onActivated: editHistory.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: editHistory.redo() }
@@ -38,10 +40,8 @@ ApplicationWindow {
                 Layout.preferredWidth: 252
                 Layout.fillHeight: true
                 activeTool: window.activeTool
-                touchDrawingEnabled: inputSettings.touchDrawingEnabled
                 gridSnapEnabled: window.gridSnapEnabled
                 onToolSelected: function(tool) { window.activeTool = tool }
-                onTouchDrawingToggled: function(enabled) { inputSettings.touchDrawingEnabled = enabled }
                 onGridSnapToggled: function(enabled) { window.gridSnapEnabled = enabled }
                 onUndoRequested: editHistory.undo()
                 onRedoRequested: editHistory.redo()
@@ -140,6 +140,8 @@ ApplicationWindow {
 
                 MoleculeCanvas {
                     id: editor
+                    // main.cpp looks this up to keep finger touches off the canvas.
+                    objectName: "moleculeCanvas"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     activeTool: window.activeTool

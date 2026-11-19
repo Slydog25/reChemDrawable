@@ -62,6 +62,29 @@ Item {
             verify(!molecule.undo())
         }
 
+        function test_gridSnapKeepsZigZagOnTheLattice() {
+            canvas.gridSnapEnabled = true
+            mouseClick(canvas, 200, 200)
+            for (let step = 0; step < 4; ++step) {
+                const atoms = molecule.atoms()
+                const last = atoms[atoms.length - 1]
+                mouseClick(canvas, last.x, last.y)
+            }
+            const atoms = molecule.atoms()
+            compare(atoms.length, 5)
+            for (let i = 0; i < atoms.length; ++i) {
+                const snapped = canvas.snapToHexGrid(atoms[i].x, atoms[i].y)
+                fuzzyCompare(atoms[i].x, snapped.x, 1e-6)
+                fuzzyCompare(atoms[i].y, snapped.y, 1e-6)
+            }
+            for (let i = 0; i + 1 < atoms.length; ++i) {
+                const dx = atoms[i + 1].x - atoms[i].x, dy = atoms[i + 1].y - atoms[i].y
+                fuzzyCompare(Math.sqrt(dx * dx + dy * dy), canvas.bondLength, 1e-6)
+            }
+            for (let i = 0; i + 2 < atoms.length; ++i) fuzzyCompare(atoms[i].y, atoms[i + 2].y, 1e-6)
+            canvas.gridSnapEnabled = false
+        }
+
         function test_zoomButtonsAndFit() {
             canvas.zoomIn()
             verify(canvas.zoom > 1)

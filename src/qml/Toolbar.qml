@@ -5,7 +5,6 @@ Rectangle {
     id: root
 
     property string activeTool: "draw"
-    property bool touchDrawingEnabled: true
     property bool gridSnapEnabled: false
     signal toolSelected(string tool)
     signal undoRequested()
@@ -27,7 +26,6 @@ Rectangle {
     signal pasteRequested()
     signal mirrorRequested(bool horizontal)
     signal alignRequested(string alignment)
-    signal touchDrawingToggled(bool enabled)
     signal gridSnapToggled(bool enabled)
 
     implicitWidth: 252
@@ -105,12 +103,6 @@ Rectangle {
 
             RailButton { iconName: "undo"; caption: "Undo"; onClicked: root.undoRequested() }
             RailButton { iconName: "redo"; caption: "Redo"; onClicked: root.redoRequested() }
-            RailButton {
-                iconName: "touch"
-                caption: "Touch"
-                selected: root.touchDrawingEnabled
-                onClicked: root.touchDrawingToggled(!root.touchDrawingEnabled)
-            }
             RailButton {
                 iconName: "grid"
                 caption: "Snap grid"

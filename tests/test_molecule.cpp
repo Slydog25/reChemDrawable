@@ -6,6 +6,7 @@
 #include "core/Molecule.h"
 #include "core/ReactionLayer.h"
 #include "core/SvgWriter.h"
+#include "platform/InputRouter.h"
 
 #include <QLineF>
 #include <QtTest>
@@ -104,13 +105,97 @@ private slots:
         QCOMPARE(benzene.bondData().at(0).order, 2);
     }
     void suggestsAnOpenBondDirection() {
+        // One horizontal bond: the next one leaves at 120 degrees, bending upward.
         Molecule molecule;
         const int center = molecule.addAtom(0, 0);
         const int right = molecule.addAtom(GeometryEngine::StandardBondLength, 0);
         QVERIFY(molecule.addBond(center, right) >= 0);
         const QPointF suggested = molecule.suggestedBondEnd(center);
-        QVERIFY(qAbs(suggested.x() + GeometryEngine::StandardBondLength) < 0.001);
-        QVERIFY(qAbs(suggested.y()) < 0.001);
+        QVERIFY(qAbs(suggested.x() + GeometryEngine::StandardBondLength / 2.0) < 0.001);
+        QVERIFY(qAbs(suggested.y() + GeometryEngine::StandardBondLength * 0.8660254) < 0.001);
+    }
+    void tapsGrowZigZagChainsAndBranchAtProperAngles() {
+        const double length = GeometryEngine::StandardBondLength;
+        const auto position = [](const Molecule &molecule, int id) {
+            for (const Atom &atom : molecule.atomData()) if (atom.id == id) return QPointF(atom.x, atom.y);
+            return QPointF();
+        };
+        const auto angleAt = [&position](const Molecule &molecule, int center, int a, int b) {
+            const double degrees = QLineF(position(molecule, center), position(molecule, a))
+                                       .angleTo(QLineF(position(molecule, center), position(molecule, b)));
+            return degrees > 180.0 ? 360.0 - degrees : degrees;
+        };
+        const auto tap = [](Molecule &molecule, int atom) {
+            const QPointF end = molecule.suggestedBondEnd(atom);
+            return molecule.extendFromAtom(atom, end.x(), end.y());
+        };
+
+        // A lone atom starts up and to the right at 30 degrees.
+        Molecule chain;
+        QVector<int> ids = {chain.addAtom(0, 0)};
+        const QPointF first = chain.suggestedBondEnd(ids.first());
+        QVERIFY(qAbs(first.x() - length * 0.8660254) < 0.001);
+        QVERIFY(qAbs(first.y() + length / 2.0) < 0.001);
+
+        // Tapping the end atom repeatedly gives a zig-zag: every angle is 120
+        // degrees and the atoms alternate up and down.
+        for (int step = 0; step < 6; ++step) ids.append(tap(chain, ids.last()));
+        for (int index = 1; index + 1 < ids.size(); ++index)
+            QVERIFY2(qAbs(angleAt(chain, ids[index], ids[index - 1], ids[index + 1]) - 120.0) < 0.01, qPrintable(QString::number(index)));
+        for (int index = 0; index + 2 < ids.size(); ++index)
+            QVERIFY(qAbs(position(chain, ids[index]).y() - position(chain, ids[index + 2]).y()) < 0.001);
+        QVERIFY(position(chain, ids.last()).x() > position(chain, ids.first()).x() + 4 * length);
+
+        // Growing from the other end keeps zig-zagging, without doubling back.
+        const int leftEnd = tap(chain, ids.first());
+        QVERIFY(qAbs(angleAt(chain, ids.first(), leftEnd, ids[1]) - 120.0) < 0.01);
+        QVERIFY(qAbs(position(chain, leftEnd).y() - position(chain, ids[1]).y()) < 0.001);
+
+        // Tapping a middle atom branches at 120 degrees from both chain bonds.
+        const int branch = tap(chain, ids[3]);
+        QVERIFY(qAbs(angleAt(chain, ids[3], branch, ids[2]) - 120.0) < 0.01);
+        QVERIFY(qAbs(angleAt(chain, ids[3], branch, ids[4]) - 120.0) < 0.01);
+
+        // Next to a triple bond the chain continues straight.
+        Molecule alkyne;
+        const int a = alkyne.addAtom(0, 0), b = alkyne.addAtom(length, 0);
+        QVERIFY(alkyne.addBond(a, b, 3) >= 0);
+        QVERIFY(qAbs(angleAt(alkyne, b, a, tap(alkyne, b)) - 180.0) < 0.01);
+
+        // A ring atom's substituent points straight out of the ring.
+        Molecule ring;
+        QVERIFY(ring.stampRing("cyclohexane", 0, 0));
+        const int ringAtom = ring.atomData().first().id;
+        const int substituent = tap(ring, ringAtom);
+        const QLineF outward(QPointF(0, 0), position(ring, ringAtom));
+        const QLineF bond(position(ring, ringAtom), position(ring, substituent));
+        QVERIFY(qAbs(outward.angleTo(bond)) < 0.01 || qAbs(outward.angleTo(bond) - 360.0) < 0.01);
+    }
+    void stampsSubstituentsAlongTheBondDirection() {
+        const auto position = [](const Molecule &molecule, int id) {
+            for (const Atom &atom : molecule.atomData()) if (atom.id == id) return QPointF(atom.x, atom.y);
+            return QPointF();
+        };
+        const auto angleAt = [&position](const Molecule &molecule, int center, int a, int b) {
+            const double degrees = QLineF(position(molecule, center), position(molecule, a))
+                                       .angleTo(QLineF(position(molecule, center), position(molecule, b)));
+            return degrees > 180.0 ? 360.0 - degrees : degrees;
+        };
+        // Ethyl chain, then COOH on its end: the carboxyl carbon continues the
+        // zig-zag and its three bonds sit at 120 degrees.
+        Molecule molecule;
+        const int c1 = molecule.addAtom(0, 0);
+        const QPointF second = molecule.suggestedBondEnd(c1);
+        const int c2 = molecule.extendFromAtom(c1, second.x(), second.y());
+        QVERIFY(molecule.stampFunctionalGroup("COOH", c2));
+        const QVector<Atom> &atoms = molecule.atomData();
+        const int carboxyl = atoms[2].id, oxo = atoms[3].id, hydroxy = atoms[4].id;
+        QVERIFY(qAbs(angleAt(molecule, c2, c1, carboxyl) - 120.0) < 0.01);
+        QVERIFY(qAbs(angleAt(molecule, carboxyl, c2, oxo) - 120.0) < 0.01);
+        QVERIFY(qAbs(angleAt(molecule, carboxyl, c2, hydroxy) - 120.0) < 0.01);
+        QVERIFY(qAbs(angleAt(molecule, carboxyl, oxo, hydroxy) - 120.0) < 0.01);
+        for (const Bond &bond : molecule.bondData())
+            QVERIFY(qAbs(QLineF(position(molecule, bond.atomA), position(molecule, bond.atomB)).length() - GeometryEngine::StandardBondLength) < 0.01);
     }
     void storesNotationAndCalculatesBasicProperties() {
         Molecule molecule;
@@ -584,6 +669,47 @@ private slots:
         QCOMPARE(layer.items().size(), 0);
         QVERIFY(!document.isDirty());
         QCOMPARE(document.title(), QString("Untitled"));
+    }
+    void routesPenEverywhereAndFingerOnlyToMenus() {
+        using Source = InputRouter::Source;
+        using Phase = InputRouter::Phase;
+        const QRectF canvas(300, 200, 1200, 1800);
+        const QPointF onCanvas(800, 900), onMenu(100, 400);
+        InputRouter router;
+
+        // The pen works on the canvas and on the menus.
+        QVERIFY(router.accept(Source::Pen, Phase::Press, onCanvas, canvas, false));
+        QVERIFY(router.accept(Source::Pen, Phase::Move, onCanvas, canvas, false));
+        QVERIFY(router.accept(Source::Pen, Phase::Release, onCanvas, canvas, false));
+        QVERIFY(router.accept(Source::Pen, Phase::Press, onMenu, canvas, false));
+        QVERIFY(router.accept(Source::Pen, Phase::Release, onMenu, canvas, false));
+
+        // A finger on the canvas is ignored for the whole touch, even if it slides
+        // onto the menu.
+        QVERIFY(!router.accept(Source::Touch, Phase::Press, onCanvas, canvas, false));
+        QVERIFY(!router.accept(Source::Touch, Phase::Move, onMenu, canvas, false));
+        QVERIFY(!router.accept(Source::Touch, Phase::Release, onMenu, canvas, false));
+
+        // A finger on the menu works, even if it slides over the canvas.
+        QVERIFY(router.accept(Source::Touch, Phase::Press, onMenu, canvas, false));
+        QVERIFY(router.accept(Source::Touch, Phase::Move, onCanvas, canvas, false));
+        QVERIFY(router.accept(Source::Touch, Phase::Release, onCanvas, canvas, false));
+
+        // With a dialog over the canvas, a finger may use it.
+        QVERIFY(router.accept(Source::Touch, Phase::Press, onCanvas, canvas, true));
+        QVERIFY(router.accept(Source::Touch, Phase::Release, onCanvas, canvas, true));
+
+        // While the pen is down, a resting hand is ignored everywhere.
+        QVERIFY(router.accept(Source::Pen, Phase::Press, onCanvas, canvas, false));
+        QVERIFY(!router.accept(Source::Touch, Phase::Press, onMenu, canvas, false));
+        QVERIFY(!router.accept(Source::Touch, Phase::Release, onMenu, canvas, false));
+        QVERIFY(router.accept(Source::Pen, Phase::Release, onCanvas, canvas, false));
+        QVERIFY(router.accept(Source::Touch, Phase::Press, onMenu, canvas, false));
+        QVERIFY(router.accept(Source::Touch, Phase::Release, onMenu, canvas, false));
+
+        // A stray move or release with no press is dropped.
+        QVERIFY(!router.accept(Source::Touch, Phase::Move, onMenu, canvas, false));
+        QVERIFY(!router.accept(Source::Touch, Phase::Release, onMenu, canvas, false));
     }
     void preservesWavyBondsInMolfiles() {
         Molecule source;

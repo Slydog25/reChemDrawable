@@ -96,13 +96,15 @@ Rectangle {
     // One bond length in canvas units, from GeometryEngine::StandardBondLength.
     readonly property real bondLength: molecule.standardBondLength
 
+    // Triangular lattice whose neighbouring points sit one bond length apart at
+    // +-30 and 90 degrees, so zig-zag chains and hexagons land on grid points.
+    // Columns are sqrt(3)/2 bond lengths apart; odd columns shift half a bond.
     function snapToHexGrid(x, y) {
-        const spacing = bondLength
-        const rowHeight = spacing * Math.sqrt(3) / 2
-        const row = Math.round(y / rowHeight)
-        const offset = Math.abs(row) % 2 ? spacing / 2 : 0
-        const column = Math.round((x - offset) / spacing)
-        return { x: column * spacing + offset, y: row * rowHeight }
+        const columnWidth = bondLength * Math.sqrt(3) / 2
+        const column = Math.round(x / columnWidth)
+        const offset = Math.abs(column) % 2 ? bondLength / 2 : 0
+        const row = Math.round((y - offset) / bondLength)
+        return { x: column * columnWidth, y: row * bondLength + offset }
     }
 
     function placementPoint(x, y) {
@@ -230,22 +232,23 @@ Rectangle {
             ctx.translate(root.panX, root.panY)
             ctx.scale(root.zoom, root.zoom)
             if (root.gridSnapEnabled) {
+                // Same lattice as snapToHexGrid.
                 const spacing = root.bondLength
-                const rowHeight = spacing * Math.sqrt(3) / 2
+                const columnWidth = spacing * Math.sqrt(3) / 2
                 const minX = -root.panX / root.zoom
                 const maxX = (width - root.panX) / root.zoom
                 const minY = -root.panY / root.zoom
                 const maxY = (height - root.panY) / root.zoom
                 ctx.fillStyle = "#e4e1d8"
-                const firstRow = Math.floor(minY / rowHeight) - 1
-                const lastRow = Math.ceil(maxY / rowHeight) + 1
-                for (let row = firstRow; row <= lastRow; ++row) {
-                    const offset = Math.abs(row) % 2 ? spacing / 2 : 0
-                    const firstColumn = Math.floor((minX - offset) / spacing) - 1
-                    const lastColumn = Math.ceil((maxX - offset) / spacing) + 1
-                    for (let column = firstColumn; column <= lastColumn; ++column) {
-                        const gridX = column * spacing + offset
-                        const gridY = row * rowHeight
+                const firstColumn = Math.floor(minX / columnWidth) - 1
+                const lastColumn = Math.ceil(maxX / columnWidth) + 1
+                for (let column = firstColumn; column <= lastColumn; ++column) {
+                    const offset = Math.abs(column) % 2 ? spacing / 2 : 0
+                    const firstRow = Math.floor((minY - offset) / spacing) - 1
+                    const lastRow = Math.ceil((maxY - offset) / spacing) + 1
+                    for (let row = firstRow; row <= lastRow; ++row) {
+                        const gridX = column * columnWidth
+                        const gridY = row * spacing + offset
                         ctx.fillRect(gridX - 1 / root.zoom, gridY - 1 / root.zoom,
                                      2 / root.zoom, 2 / root.zoom)
                     }
