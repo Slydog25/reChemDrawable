@@ -77,4 +77,21 @@ TestCase {
         grabImage(editor).save("/workspace/build-pc/screen-drawing.png")
         window.destroy()
     }
+
+    // SMILES import layouts.
+    function test_smilesImport() {
+        const component = Qt.createComponent("../../src/qml/Main.qml")
+        const window = component.createObject(null, { width: 1620, height: 2160 })
+        document.newDocument()
+        molecule.importSmiles("Cn1cnc2c1c(=O)n(C)c(=O)n2C", 250, 250)          // caffeine
+        molecule.importSmiles("CC(C)Cc1ccc(cc1)C(C)C(=O)O", 750, 250)         // ibuprofen
+        molecule.importSmiles("CC(=O)Oc1ccccc1C(=O)O", 1150, 250)             // aspirin
+        molecule.importSmiles("CC12CCC3C(CCc4ccccc34)C1CCC2O", 350, 650)      // steroid-like
+        molecule.importSmiles("C1CCC2(CC1)CCCC2", 800, 650)                   // spiro[4.5]decane
+        molecule.importSmiles("c1ccc2ccccc2c1", 1150, 650)                    // naphthalene
+        findChild(window, "moleculeCanvas").fitToContent()
+        wait(400)
+        grabImage(findChild(window, "moleculeCanvas")).save("/workspace/build-pc/screen-smiles.png")
+        window.destroy()
+    }
 }

@@ -11,14 +11,23 @@ The current milestone is a desktop Qt Quick prototype with a testable C++ molecu
 - Formula (isotope labels shown as e.g. `[13C]`), molecular weight, and exact-mass summaries for the drawn structure.
 - MDL Molfile V2000 read/write with charge, isotope, aromatic, and wedge/dash/wavy preservation, plus SVG and SMILES export.
 - On the tablet the pen draws and selects; a finger only works the menus and dialogs around the canvas, so a resting hand never draws. While the pen is down, finger touches are ignored.
-- A quick two-finger tap anywhere on the tablet undoes the last edit.
+- Finger gestures on the tablet: a quick two-finger tap undoes, a three-finger tap redoes, and two fingers dragged or pinched on the canvas pan and zoom it.
 - The Marker's eraser end erases whatever it passes over (atoms, bonds, arrows, labels); one stroke is one undo step. AppLoad reports eraser strokes as ordinary pen input, so the app checks the pen's own input device (`BTN_TOOL_RUBBER`) when a stroke starts. On desktop, right-drag erases, and the Erase tool erases by tapping or dragging.
 - Tapping an atom adds a bond at standard skeletal-formula angles: chains zig-zag at 120°, a chain atom branches at 120° to both bonds, ring substituents point straight out, and bonds next to a triple bond continue in a line. Substituent stamps (COOH, NO2, Ph, ...) follow the same direction, and the snap grid's points sit on those angles.
 - A monochrome QML editor with tap-to-place/tap-to-connect editing, drag-to-move, pan, zoom buttons and Fit (plus wheel and pinch zoom on desktop), and common fragment stamps (OH, NH2, Me, COOH, CN, NO2, tBu, and Ph).
 - **Clean** straightens bond lengths and angles: 120° in chains, 180° beside triple bonds, and regular-polygon angles in rings.
-- Box selection, multi-atom move/rotate/mirror/align/delete, and copy/paste of complete selected fragments; desktop builds also accept the standard undo/redo and copy/paste keyboard shortcuts.
+- Lasso selection (draw a loop around atoms), multi-atom move/rotate/mirror/align/delete, copy/paste and one-tap **Duplicate** of selected fragments; desktop builds also accept the standard undo/redo and copy/paste keyboard shortcuts.
+- Textbook atom labels: implicit hydrogens on heteroatoms ("OH", "NH₂", written "HO", "H₂N" when the bond comes from the right), isotopes as superscripts, charges as superscripts or circled (⊕/⊖ drawn, toggle "(+)"), lone pairs (LP) and radical dots (•), and a red ring on atoms with impossible valence.
+- Group abbreviations (Me, Et, iPr, tBu, Ph, Bn, Ac, Bz, Boc, Cbz, Fmoc, Ts, Ms, Tf, TMS, TBS, TIPS, OMe, OAc, OTs, OTf, OTBS, NHBoc, CF₃, CHO, CO₂H, CO₂Me, CO₂Et, CN, NO₂, ...) from **Abbrev…**: drawn as one label, mirrored when needed, and counted fully in formula, mass, SMILES and Molfile (as aliases).
+- **Chain** tool: drag from an atom or empty space and a zig-zag chain follows the pen with a live carbon count.
+- Ring templates: 3- to 8-membered rings, benzene, a chair cyclohexane, pyridine, pyrimidine, furan, thiophene, pyrrole, imidazole and indole. Rings fuse onto a tapped bond on the uncrowded side; heterocycles attach to a tapped atom as substituents.
+- The Style tool cycles wedge/dash/wavy on single bonds, and centred/left/right placement of the second line on double bonds.
+- Optional R/S and E/Z labels (toolbar **R/S**) from wedges and double-bond geometry (CIP rules 1a/1b).
+- **Bold lines** toggle for thicker bonds and larger labels on e-ink.
 - One undo/redo timeline covering both structure edits and reaction arrows/labels; **Clear** undoes in a single step.
-- Reaction-scheme arrows and condition/reagent text labels, saved together with the molecule in a portable `.rcd` JSON document and included in SVG scheme export. Common labels (Δ, hν, rt, reagents, solvents) are one tap away, since the tablet has no keyboard.
+- Reaction-scheme arrows: forward, equilibrium ⇌, retrosynthesis ⇒, resonance ↔, dashed, no-reaction, and curved electron-pushing arrows (full head and fishhook) that bend the way the pen moved. Arrows are drawn by dragging (or tap start, tap end).
+- Condition/reagent labels snap above or below an arrow; compound numbers ("1", "2a") are bold; "+" separates reactants. Common labels (Δ, hν, rt, reagents, solvents) are one tap away, since the tablet has no keyboard. Arrows and labels are saved with the molecule in a portable `.rcd` JSON document and included in SVG export.
+- SMILES import with automatic 2D layout (rings, fused and spiro systems, zig-zag chains): **Import SMILES** next to the text field on desktop, or open a `.smi` file from the drawings folder on the tablet.
 
 ## Desktop build
 
@@ -50,6 +59,7 @@ Drawings live in `reChemDrawable/` inside the platform's Documents folder.
 
 - **Save** writes the drawing as an `.rcd` file (the structure plus arrows and labels). A new drawing gets a timestamped name such as `drawing-20261118-1530.rcd`; later saves update that same file. The title bar shows the name, with `•` while there are unsaved changes.
 - **Open** lists the `.rcd` and `.mol` files in that folder, newest first. Opening a `.mol` starts a drawing without annotations, and saving it creates a separate `.rcd`, so the original Molfile is never overwritten.
+- Once a drawing has a file, it is saved automatically a few seconds after each change. **Open** shows a preview, the date and the formula of each drawing, and can delete drawings (with a confirmation).
 - **New**, **Open**, **Exit**, and closing the window ask before discarding unsaved changes. Closing the app from AppLoad's X instead saves unsaved changes as `recovered-<time>.rcd` (it cannot show a dialog there), and those files appear in Open.
 - **.mol**, **SVG**, and **SMILES** write exports named after the drawing into the `exports/` subfolder.
 
