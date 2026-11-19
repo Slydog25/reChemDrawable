@@ -871,7 +871,7 @@ private slots:
         QVERIFY(!tap.feed(3, Phase::Press, b + QPointF(100, 0), 5060));
         QVERIFY(!tap.feed(3, Phase::Release, b, 5150));
         QVERIFY(!tap.feed(2, Phase::Release, b, 5160));
-        QVERIFY(!tap.feed(1, Phase::Release, a, 5170));
+        QCOMPARE(tap.feed(1, Phase::Release, a, 5170), 3); // now a three-finger tap (redo)
 
         // A stray release is ignored, and the next tap still works.
         QVERIFY(!tap.feed(9, Phase::Release, a, 6000));

@@ -41,6 +41,7 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 activeTool: window.activeTool
                 gridSnapEnabled: window.gridSnapEnabled
+                boldLines: editor.boldLines
                 onToolSelected: function(tool) { window.activeTool = tool }
                 onGridSnapToggled: function(enabled) { window.gridSnapEnabled = enabled }
                 onUndoRequested: editHistory.undo()
@@ -61,6 +62,8 @@ ApplicationWindow {
                 onDeleteSelectionRequested: editor.deleteSelection()
                 onCopyRequested: editor.copySelection()
                 onPasteRequested: editor.pasteSelection()
+                onDuplicateRequested: editor.duplicateSelection()
+                onBoldToggled: function(enabled) { editor.boldLines = enabled }
                 onMirrorRequested: function(horizontal) { editor.mirrorSelection(horizontal) }
                 onAlignRequested: function(alignment) { editor.alignSelection(alignment) }
             }

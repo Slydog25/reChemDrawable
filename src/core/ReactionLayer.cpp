@@ -101,10 +101,18 @@ bool ReactionLayer::saveToFile(const QString &path) {
         if (item.type == QStringLiteral("label")) object.insert(QStringLiteral("text"), item.text);
         annotations.append(object);
     }
-    const QJsonObject document{{QStringLiteral("format"), QStringLiteral("reChemDrawable reaction scheme")},
+    // The Molfile cannot store where a double bond's second line goes; keep it by bond index.
+    QJsonArray bondSides;
+    bool anySide = false;
+    for (const Bond &bond : m_molecule->bondData()) {
+        bondSides.append(bond.doubleSide);
+        anySide = anySide || bond.doubleSide != 0;
+    }
+    QJsonObject document{{QStringLiteral("format"), QStringLiteral("reChemDrawable reaction scheme")},
                                {QStringLiteral("version"), 1},
                                {QStringLiteral("molfile"), MolfileWriter::writeV2000(*m_molecule, info.completeBaseName())},
                                {QStringLiteral("annotations"), annotations}};
+    if (anySide) document.insert(QStringLiteral("bondSides"), bondSides);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly)) return false;
     file.write(QJsonDocument(document).toJson(QJsonDocument::Indented));
@@ -137,7 +145,11 @@ bool ReactionLayer::loadFromFile(const QString &path) {
                             object.value(QStringLiteral("x2")).toDouble(), object.value(QStringLiteral("y2")).toDouble(), object.value(QStringLiteral("text")).toString()});
         nextId = qMax(nextId, id + 1);
     }
-    m_molecule->replaceContent(parsed.atomData(), parsed.bondData());
+    QVector<Bond> parsedBonds = parsed.bondData();
+    const QJsonArray bondSides = root.value(QStringLiteral("bondSides")).toArray();
+    for (int index = 0; index < parsedBonds.size() && index < bondSides.size(); ++index)
+        parsedBonds[index].doubleSide = qBound(-1, bondSides.at(index).toInt(), 1);
+    m_molecule->replaceContent(parsed.atomData(), parsedBonds);
     m_items = annotations;
     m_nextId = nextId;
     m_undo.clear(); m_redo.clear();

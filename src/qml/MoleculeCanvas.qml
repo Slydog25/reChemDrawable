@@ -6,13 +6,14 @@ Rectangle {
     property string ringTemplate: "cyclohexane"
     property int selectedAtom: -1
     property var selectedAtoms: []
-    property bool selectionBoxVisible: false
-    property real selectionBoxX: 0
-    property real selectionBoxY: 0
-    property real selectionBoxWidth: 0
-    property real selectionBoxHeight: 0
     property bool boxSelectionCommitted: false
     property real zoom: 1.0
+    // View setting (not saved): thicker bonds and larger labels for e-ink readability.
+    property bool boldLines: false
+    readonly property real bondWidth: boldLines ? 4.5 : 3
+    readonly property real labelScale: boldLines ? 1.2 : 1.0
+    // Freeform lasso drawn by the Select tool, in canvas (screen) coordinates.
+    property var lassoPoints: []
     property real panX: 0
     property real panY: 0
     property bool gridSnapEnabled: false
@@ -136,6 +137,15 @@ Rectangle {
         drawing.requestPaint()
     }
 
+    // Two-finger pan and pinch from the tablet: zoom by `scale` about (cx, cy)
+    // in canvas coordinates (clamped to the zoom limits), then pan by (dx, dy).
+    function panZoomBy(dx, dy, scale, cx, cy) {
+        if (scale !== 1) zoomTo(zoom * scale, cx, cy)
+        panX += dx
+        panY += dy
+        drawing.requestPaint()
+    }
+
     function zoomIn() { zoomAt(1.25, width / 2, height / 2) }
     function zoomOut() { zoomAt(1 / 1.25, width / 2, height / 2) }
 
@@ -221,6 +231,21 @@ Rectangle {
         else status("Select one or more atoms to copy.")
     }
 
+    // Copies the selected fragment two bond lengths down-right in one undo step
+    // and selects the copy.
+    function duplicateSelection() {
+        const offset = 2 * bondLength
+        const created = selectedAtoms.length ? molecule.duplicateAtoms(selectedAtoms, offset, offset) : []
+        if (created.length) {
+            selectedAtoms = created
+            selectedAtomChangedByCanvas(created[created.length - 1])
+            status("Fragment duplicated.")
+        } else {
+            status("Select one or more atoms to duplicate.")
+        }
+        drawing.requestPaint()
+    }
+
     function pasteSelection() {
         const target = modelPoint(width / 2, height / 2)
         const pasted = molecule.pasteAtoms(target.x, target.y)
@@ -239,11 +264,14 @@ Rectangle {
             ctx.reset()
             ctx.fillStyle = "white"
             ctx.fillRect(0, 0, width, height)
-            if (root.selectionBoxVisible) {
+            if (root.lassoPoints.length > 1) {
                 ctx.strokeStyle = "#756100"
-                ctx.lineWidth = 1
+                ctx.lineWidth = 2
                 ctx.setLineDash([4, 3])
-                ctx.strokeRect(root.selectionBoxX, root.selectionBoxY, root.selectionBoxWidth, root.selectionBoxHeight)
+                ctx.beginPath()
+                ctx.moveTo(root.lassoPoints[0].x, root.lassoPoints[0].y)
+                for (let i = 1; i < root.lassoPoints.length; ++i) ctx.lineTo(root.lassoPoints[i].x, root.lassoPoints[i].y)
+                ctx.stroke()
                 ctx.setLineDash([])
             }
             ctx.save()
@@ -274,7 +302,7 @@ Rectangle {
             }
             ctx.strokeStyle = "#121212"
             ctx.fillStyle = "#121212"
-            ctx.lineWidth = 3
+            ctx.lineWidth = root.bondWidth
             for (let i = 0; i < reactionItems.length; ++i) {
                 const item = reactionItems[i]
                 if (item.type === "arrow") {
@@ -289,7 +317,7 @@ Rectangle {
                     ctx.lineTo(item.x2 - ux * 13 - nx * 7, item.y2 - uy * 13 - ny * 7)
                     ctx.stroke()
                 } else if (item.type === "label") {
-                    ctx.font = "18px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
+                    ctx.font = Math.round(18 * root.labelScale) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
                     ctx.fillText(item.text, item.x1, item.y1)
                 }
             }
@@ -348,6 +376,16 @@ Rectangle {
                     }
                     continue
                 }
+                if (bond.order === 2 && bond.doubleSide !== 0 && bond.style === "plain" && length > 0) {
+                    // Full line on the atom axis plus a shorter parallel line to one side.
+                    const inset = bond.doubleSide > 0 ? 7 : -7
+                    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+                    ctx.beginPath()
+                    ctx.moveTo(a.x + dx * 0.12 + nx * inset, a.y + dy * 0.12 + ny * inset)
+                    ctx.lineTo(b.x - dx * 0.12 + nx * inset, b.y - dy * 0.12 + ny * inset)
+                    ctx.stroke()
+                    continue
+                }
                 const offsets = bond.style === "aromatic" ? [0] : bond.order === 1 ? [0] : bond.order === 2 ? [-4, 4] : [-6, 0, 6]
                 if (bond.style === "aromatic") ctx.setLineDash([7, 5])
                 for (let j = 0; j < offsets.length; ++j) {
@@ -368,10 +406,10 @@ Rectangle {
                     ctx.lineTo(root.bondPreviewX, root.bondPreviewY); ctx.stroke()
                     ctx.setLineDash([])
                     ctx.strokeStyle = "#121212"
-                    ctx.lineWidth = 3
+                    ctx.lineWidth = root.bondWidth
                 }
             }
-            ctx.font = "20px sans-serif"
+            ctx.font = Math.round(20 * root.labelScale) + "px sans-serif"
             ctx.textAlign = "center"
             ctx.textBaseline = "middle"
             for (let i = 0; i < atomItems.length; ++i) {
@@ -384,7 +422,7 @@ Rectangle {
                 } else {
                     const metrics = ctx.measureText(label)
                     ctx.fillStyle = "white"
-                    ctx.fillRect(atom.x - metrics.width / 2 - 4, atom.y - 14, metrics.width + 8, 28)
+                    ctx.fillRect(atom.x - metrics.width / 2 - 4, atom.y - 14 * root.labelScale, metrics.width + 8, 28 * root.labelScale)
                     ctx.fillStyle = root.atomColor(atom.element)
                     ctx.fillText(label, atom.x, atom.y)
                 }
@@ -392,7 +430,7 @@ Rectangle {
                     ctx.strokeStyle = "#756100"
                     ctx.lineWidth = 2
                     ctx.beginPath(); ctx.arc(atom.x, atom.y, 16, 0, 2 * Math.PI); ctx.stroke()
-                    ctx.strokeStyle = "#121212"; ctx.lineWidth = 3
+                    ctx.strokeStyle = "#121212"; ctx.lineWidth = root.bondWidth
                 }
             }
             ctx.restore()
@@ -441,9 +479,7 @@ Rectangle {
                 skipNextClick = false
             }
             if (activeTool === "select") {
-                root.selectionBoxVisible = true
-                root.selectionBoxX = mouse.x; root.selectionBoxY = mouse.y
-                root.selectionBoxWidth = 0; root.selectionBoxHeight = 0
+                root.lassoPoints = [{ x: mouse.x, y: mouse.y }]
                 root.boxSelectionCommitted = false
                 drawing.requestPaint()
             }
@@ -487,10 +523,7 @@ Rectangle {
                 dragStartX = mouse.x; dragStartY = mouse.y; drawing.requestPaint()
             }
             if (pressed && activeTool === "select") {
-                root.selectionBoxX = Math.min(dragStartX, mouse.x)
-                root.selectionBoxY = Math.min(dragStartY, mouse.y)
-                root.selectionBoxWidth = Math.abs(mouse.x - dragStartX)
-                root.selectionBoxHeight = Math.abs(mouse.y - dragStartY)
+                root.lassoPoints = root.lassoPoints.concat([{ x: mouse.x, y: mouse.y }])
                 drawing.requestPaint()
             }
             if (pressed && activeTool === "move" && dragAtom >= 0) {
@@ -529,19 +562,21 @@ Rectangle {
             root.bondPreviewVisible = false
             root.bondPreviewAtom = -1
             drawing.requestPaint()
-            if (activeTool === "select" && root.selectionBoxWidth > 6 && root.selectionBoxHeight > 6) {
-                const first = root.modelPoint(dragStartX, dragStartY)
-                const last = root.modelPoint(mouse.x, mouse.y)
-                const minX = Math.min(first.x, last.x), maxX = Math.max(first.x, last.x)
-                const minY = Math.min(first.y, last.y), maxY = Math.max(first.y, last.y)
-                root.selectedAtoms = root.atomItems.filter(function(atom) {
-                    return atom.x >= minX && atom.x <= maxX && atom.y >= minY && atom.y <= maxY
-                }).map(function(atom) { return atom.id })
-                root.selectedAtomChangedByCanvas(root.selectedAtoms.length ? root.selectedAtoms[root.selectedAtoms.length - 1] : -1)
-                root.boxSelectionCommitted = true
-            }
             if (activeTool === "select") {
-                root.selectionBoxVisible = false
+                const loop = root.lassoPoints
+                root.lassoPoints = []
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+                for (let i = 0; i < loop.length; ++i) {
+                    minX = Math.min(minX, loop[i].x); maxX = Math.max(maxX, loop[i].x)
+                    minY = Math.min(minY, loop[i].y); maxY = Math.max(maxY, loop[i].y)
+                }
+                // A tiny loop is a tap, handled by onClicked.
+                if (loop.length >= 3 && maxX - minX > 6 && maxY - minY > 6) {
+                    const modelLoop = loop.map(function(point) { return root.modelPoint(point.x, point.y) })
+                    root.selectedAtoms = molecule.atomsInPolygon(modelLoop)
+                    root.selectedAtomChangedByCanvas(root.selectedAtoms.length ? root.selectedAtoms[root.selectedAtoms.length - 1] : -1)
+                    root.boxSelectionCommitted = true
+                }
                 drawing.requestPaint()
             }
             if (activeTool === "move" && dragAtom >= 0) {
@@ -557,6 +592,7 @@ Rectangle {
             dragReactionItem = -1
         }
         onCanceled: {
+            if (root.lassoPoints.length) { root.lassoPoints = []; drawing.requestPaint() }
             if (erasing) { erasing = false; editHistory.endGroup() }
         }
         onClicked: function(mouse) {
@@ -609,7 +645,7 @@ Rectangle {
             }
             if (activeTool === "stereo") {
                 if (hitBond >= 0) molecule.cycleBondStyle(hitBond)
-                else status("Tap a bond to cycle plain, wedge, dash, wavy, and aromatic styles.")
+                else status("Tap a bond to cycle its style (double bonds: centred or offset to either side).")
                 return
             }
             if (activeTool === "select") {

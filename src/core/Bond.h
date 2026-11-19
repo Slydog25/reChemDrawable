@@ -9,4 +9,5 @@ struct Bond {
     int order = 1;
     int stereo = 0;
     QString style = QStringLiteral("plain"); // plain, wedge, dash, wavy, aromatic, benzene
+    int doubleSide = 0; // double bonds: 0 centred, +1 / -1 second line offset to either side
 };

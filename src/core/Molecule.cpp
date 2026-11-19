@@ -28,7 +28,8 @@ QVariantMap atomMap(const Atom &atom) {
 QVariantMap bondMap(const Bond &bond) {
     return {{QStringLiteral("id"), bond.id}, {QStringLiteral("atomA"), bond.atomA},
             {QStringLiteral("atomB"), bond.atomB}, {QStringLiteral("order"), bond.order},
-            {QStringLiteral("stereo"), bond.stereo}, {QStringLiteral("style"), bond.style}};
+            {QStringLiteral("stereo"), bond.stereo}, {QStringLiteral("style"), bond.style},
+            {QStringLiteral("doubleSide"), bond.doubleSide}};
 }
 
 bool isBondStyle(const QString &style) {
@@ -336,6 +337,7 @@ bool Molecule::setBondStyle(int bondId, const QString &style) {
     Bond *bond = findBond(bondId);
     if (!bond || !isBondStyle(style)) return false;
     const Snapshot before = snapshot();
+    bond = findBond(bondId); // detach from the snapshot's shared copy before writing
     bond->style = style;
     // Keep the stored stereo flag in V2000 terms, matching MolfileReader/Writer.
     bond->stereo = style == QStringLiteral("wedge") ? 1 : style == QStringLiteral("dash") ? 6 :
@@ -344,9 +346,80 @@ bool Molecule::setBondStyle(int bondId, const QString &style) {
     return true;
 }
 
+bool Molecule::setBondDoubleSide(int bondId, int side) {
+    Bond *bond = findBond(bondId);
+    if (!bond) return false;
+    side = qBound(-1, side, 1);
+    if (bond->doubleSide == side) return false;
+    const Snapshot before = snapshot();
+    bond = findBond(bondId); // re-find: the snapshot shares the vector, so detach before writing
+    bond->doubleSide = side;
+    commit(before);
+    return true;
+}
+
+bool Molecule::cycleBondDoubleSide(int bondId) {
+    const Bond *bond = findBond(bondId);
+    if (!bond || bond->order != 2) return false;
+    // centred -> one side -> other side -> centred
+    const int next = bond->doubleSide == 0 ? 1 : bond->doubleSide == 1 ? -1 : 0;
+    return setBondDoubleSide(bondId, next);
+}
+
+QVariantList Molecule::atomsInPolygon(const QVariantList &points) const {
+    QVector<QPointF> polygon;
+    for (const QVariant &value : points) {
+        const QVariantMap point = value.toMap();
+        polygon.append(QPointF(point.value(QStringLiteral("x")).toDouble(), point.value(QStringLiteral("y")).toDouble()));
+    }
+    QVariantList inside;
+    if (polygon.size() < 3) return inside;
+    for (const Atom &atom : m_atoms) {
+        bool in = false;
+        for (int i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+            const QPointF &pi = polygon[i], &pj = polygon[j];
+            if ((pi.y() > atom.y) != (pj.y() > atom.y) &&
+                atom.x < (pj.x() - pi.x()) * (atom.y - pi.y()) / (pj.y() - pi.y()) + pi.x())
+                in = !in;
+        }
+        if (in) inside.append(atom.id);
+    }
+    return inside;
+}
+
+QVariantList Molecule::duplicateAtoms(const QVariantList &atomIds, double dx, double dy) {
+    QSet<int> ids;
+    for (const QVariant &value : atomIds) ids.insert(value.toInt());
+    QVariantList created;
+    QVector<Atom> sources;
+    for (const Atom &atom : m_atoms) if (ids.contains(atom.id)) sources.append(atom);
+    if (sources.isEmpty()) return created;
+    const Snapshot before = snapshot();
+    QHash<int, int> mapping;
+    for (const Atom &source : sources) {
+        Atom atom = source;
+        atom.id = m_nextAtomId++; atom.x += dx; atom.y += dy;
+        m_atoms.append(atom);
+        mapping.insert(source.id, atom.id);
+        created.append(atom.id);
+    }
+    const QVector<Bond> existing = m_bonds;
+    for (const Bond &source : existing) {
+        if (!mapping.contains(source.atomA) || !mapping.contains(source.atomB)) continue;
+        Bond bond = source;
+        bond.id = m_nextBondId++;
+        bond.atomA = mapping.value(source.atomA); bond.atomB = mapping.value(source.atomB);
+        m_bonds.append(bond);
+    }
+    commit(before);
+    return created;
+}
+
 bool Molecule::cycleBondStyle(int bondId) {
     const Bond *bond = findBond(bondId);
     if (!bond) return false;
+    // A double bond has no wedge/dash/wavy meaning; the Style tool moves its second line instead.
+    if (bond->order == 2) return cycleBondDoubleSide(bondId);
     const QStringList styles = {QStringLiteral("plain"), QStringLiteral("wedge"), QStringLiteral("dash"),
                                 QStringLiteral("wavy"), QStringLiteral("aromatic")};
     const int index = styles.indexOf(bond->style);

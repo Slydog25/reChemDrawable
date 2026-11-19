@@ -83,6 +83,14 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
             }
             continue;
         }
+        if (bond.order == 2 && bond.doubleSide != 0 && bond.style == QStringLiteral("plain") && length > 0.0) {
+            // Full line on the atom axis plus a shorter parallel line to one side.
+            const double inset = bond.doubleSide > 0 ? 7.0 : -7.0;
+            stream << "<line x1=\"" << a.x << "\" y1=\"" << a.y << "\" x2=\"" << b.x << "\" y2=\"" << b.y << "\"/>\n";
+            stream << "<line x1=\"" << a.x + dx * 0.12 + nx * inset << "\" y1=\"" << a.y + dy * 0.12 + ny * inset
+                   << "\" x2=\"" << b.x - dx * 0.12 + nx * inset << "\" y2=\"" << b.y - dy * 0.12 + ny * inset << "\"/>\n";
+            continue;
+        }
         const QString dashArray = bond.style == QStringLiteral("aromatic") ? QStringLiteral(" stroke-dasharray=\"7 5\"") : QString();
         const QVector<double> offsets = bond.order == 1 ? QVector<double>{0} : bond.order == 2 ? QVector<double>{-4, 4} : QVector<double>{-6, 0, 6};
         for (double offset : offsets) stream << "<line x1=\"" << a.x + nx * offset << "\" y1=\"" << a.y + ny * offset

@@ -192,6 +192,13 @@ Canvas {
         case "paste":
             box(9, 8, 26, 32); box(16, 4, 12, 8); line(15, 23, 29, 23); line(15, 30, 26, 30)
             break
+        case "duplicate": // a fragment and its copy, offset down-right with a plus
+            box(4, 4, 18, 18); line(9, 13, 17, 13); line(13, 9, 13, 17)
+            box(23, 23, 17, 17)
+            break
+        case "bold": // a thick bond beside a thin one
+            line(8, 12, 36, 12); ctx.lineWidth = 8; line(8, 30, 36, 30); ctx.lineWidth = 3
+            break
         case "delete": // trash can
             line(7, 11, 37, 11); line(17, 6, 27, 6)
             path([[10, 11], [12, 39], [32, 39], [34, 11]], false); line(18, 17, 18, 33); line(26, 17, 26, 33)

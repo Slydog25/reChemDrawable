@@ -6,6 +6,7 @@ Rectangle {
 
     property string activeTool: "draw"
     property bool gridSnapEnabled: false
+    property bool boldLines: false
     signal toolSelected(string tool)
     signal exitRequested()
     signal undoRequested()
@@ -25,6 +26,8 @@ Rectangle {
     signal deleteSelectionRequested()
     signal copyRequested()
     signal pasteRequested()
+    signal duplicateRequested()
+    signal boldToggled(bool enabled)
     signal mirrorRequested(bool horizontal)
     signal alignRequested(string alignment)
     signal gridSnapToggled(bool enabled)
@@ -127,6 +130,13 @@ Rectangle {
             RailButton { iconName: "alignV"; caption: "Align V"; onClicked: root.alignRequested("vertical") }
             RailButton { iconName: "copy"; caption: "Copy"; onClicked: root.copyRequested() }
             RailButton { iconName: "paste"; caption: "Paste"; onClicked: root.pasteRequested() }
+            RailButton { iconName: "duplicate"; caption: "Duplicate"; onClicked: root.duplicateRequested() }
+            RailButton {
+                iconName: "bold"
+                caption: "Bold lines"
+                selected: root.boldLines
+                onClicked: root.boldToggled(!root.boldLines)
+            }
             RailButton { iconName: "delete"; caption: "Delete"; onClicked: root.deleteSelectionRequested() }
             RailButton { iconName: "clear"; caption: "Clear"; onClicked: root.clearRequested() }
             RailButton { objectName: "exitButton"; iconName: "exit"; caption: "Exit"; onClicked: root.exitRequested() }
