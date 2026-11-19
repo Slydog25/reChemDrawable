@@ -2,6 +2,7 @@
 
 #include "Molecule.h"
 #include "ReactionLayer.h"
+#include "SchemeAnalysis.h"
 
 #include <algorithm>
 
@@ -44,6 +45,22 @@ void EditHistory::clearAll() {
     m_molecule->clear();
     m_reactions->clear();
     endGroup();
+}
+
+bool EditHistory::tidyScheme() {
+    if (m_grouping) return false;
+    const SchemeAnalysis::Tidy plan = SchemeAnalysis::tidyPlan(*m_molecule, m_reactions->items());
+    if (plan.isEmpty()) return false;
+    beginGroup();
+    for (const SchemeAnalysis::Tidy::ArrowEnds &ends : plan.arrows) m_reactions->setArrowEnds(ends.id, ends.x1, ends.y1, ends.x2, ends.y2);
+    for (const SchemeAnalysis::Tidy::AtomMove &move : plan.atoms) {
+        QVariantList ids;
+        for (int id : move.atomIds) ids.append(id);
+        m_molecule->translateAtoms(ids, move.dx, move.dy);
+    }
+    for (const SchemeAnalysis::Tidy::ItemMove &move : plan.items) m_reactions->translateItem(move.id, move.dx, move.dy);
+    endGroup();
+    return true;
 }
 
 void EditHistory::beginGroup() {

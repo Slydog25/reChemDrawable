@@ -100,6 +100,8 @@ QImage ThumbnailWriter::render(const Molecule &molecule, const QVariantList &rea
             drawText(item.value(QStringLiteral("text")).toString(), map(p1), false);
             continue;
         }
+        // Mechanism marks (dagger, bracket, orbital) are too small to matter in a thumbnail.
+        if (item.value(QStringLiteral("type")).toString() != QStringLiteral("arrow")) continue;
         painter.setPen(QPen(ink, 1.8, Qt::SolidLine, Qt::RoundCap));
         const QPointF a = map(p1), b = map(p2);
         painter.drawLine(a, b);

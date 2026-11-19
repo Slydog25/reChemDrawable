@@ -25,6 +25,7 @@ set(CORE_SOURCES
     src/core/MolfileReader.cpp
     src/core/MolfileWriter.cpp
     src/core/ReactionLayer.cpp
+    src/core/SchemeAnalysis.cpp
     src/core/SmilesReader.cpp
     src/core/SmilesWriter.cpp
     src/core/Stereo.cpp
@@ -45,6 +46,7 @@ set(CORE_HEADERS
     src/core/MolfileReader.h
     src/core/MolfileWriter.h
     src/core/ReactionLayer.h
+    src/core/SchemeAnalysis.h
     src/core/SmilesReader.h
     src/core/SmilesWriter.h
     src/core/Stereo.h
@@ -109,6 +111,7 @@ if(BUILD_TESTING)
     rechemdraw_add_test(stereo_tests tests/test_stereo.cpp)      # CIP R/S and E/Z
     rechemdraw_add_test(label_tests tests/test_labels.cpp)
     rechemdraw_add_test(smiles_import_tests tests/test_smiles_import.cpp)  # parser, 2D layout, .smi
+    rechemdraw_add_test(mechanism_tests tests/test_mechanism.cpp)  # mechanism marks, balance check, tidy
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
     qt_add_executable(qml_tests tests/qml_tests.cpp)

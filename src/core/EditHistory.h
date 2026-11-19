@@ -23,6 +23,10 @@ public:
     // (e.g. everything one eraser stroke removed). Groups do not nest.
     Q_INVOKABLE void beginGroup();
     Q_INVOKABLE void endGroup();
+    // Lays the scheme out left to right on one baseline (molecules vertically centred,
+    // arrows ~3 bond lengths long between them, arrow labels moved along) as one undo
+    // step. Returns false when there is nothing to move.
+    Q_INVOKABLE bool tidyScheme();
 
 private:
     static constexpr int MaxSteps = 400;

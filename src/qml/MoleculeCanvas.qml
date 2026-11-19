@@ -112,6 +112,43 @@ Rectangle {
         }
     }
 
+    // Mechanism marks; the SVG writer mirrors these shapes. The double dagger is drawn
+    // as strokes rather than as the U+2021 glyph, which the tablet font may lack.
+    function paintDagger(ctx, x, y) {
+        const w = ctx.lineWidth
+        ctx.lineWidth = 2
+        ctx.beginPath(); ctx.moveTo(x, y - 10); ctx.lineTo(x, y + 10)
+        ctx.moveTo(x - 5, y - 4); ctx.lineTo(x + 5, y - 4)
+        ctx.moveTo(x - 5, y + 4); ctx.lineTo(x + 5, y + 4); ctx.stroke()
+        ctx.lineWidth = w
+    }
+    function paintBracket(ctx, item) {
+        const tick = 8
+        ctx.beginPath()
+        ctx.moveTo(item.x1 + tick, item.y1); ctx.lineTo(item.x1, item.y1); ctx.lineTo(item.x1, item.y2); ctx.lineTo(item.x1 + tick, item.y2)
+        ctx.moveTo(item.x2 - tick, item.y1); ctx.lineTo(item.x2, item.y1); ctx.lineTo(item.x2, item.y2); ctx.lineTo(item.x2 - tick, item.y2)
+        ctx.stroke()
+        if (item.kind === "dagger") paintDagger(ctx, item.x2 + 11, item.y1 - 8)
+    }
+    function paintOrbital(ctx, item) {
+        const length = Math.sqrt((item.x2 - item.x1) * (item.x2 - item.x1) + (item.y2 - item.y1) * (item.y2 - item.y1))
+        if (length < 0.01) return
+        for (let lobe = 0; lobe < 2; ++lobe) {
+            const sign = lobe === 0 ? 1 : -1
+            const ux = sign * (item.x2 - item.x1) / length, uy = sign * (item.y2 - item.y1) / length, nx = -uy, ny = ux
+            const w = 11
+            const px = function(along, across) { return item.x1 + ux * along + nx * across }
+            const py = function(along, across) { return item.y1 + uy * along + ny * across }
+            ctx.beginPath()
+            ctx.moveTo(item.x1, item.y1)
+            ctx.bezierCurveTo(px(length * 0.25, w * 1.3), py(length * 0.25, w * 1.3), px(length * 0.9, w), py(length * 0.9, w), px(length, 0), py(length, 0))
+            ctx.bezierCurveTo(px(length * 0.9, -w), py(length * 0.9, -w), px(length * 0.25, -w * 1.3), py(length * 0.25, -w * 1.3), item.x1, item.y1)
+            ctx.closePath()
+            if (item.kind === "shaded" && lobe === 0) ctx.fill()
+            ctx.stroke()
+        }
+    }
+
     // A half-placed arrow should not survive switching to another tool.
     onActiveToolChanged: canvasInput.awaitingArrowEnd = false
 
@@ -400,6 +437,12 @@ Rectangle {
                 const item = reactionItems[i]
                 if (item.type === "arrow") {
                     root.paintArrow(ctx, item)
+                } else if (item.type === "dagger") {
+                    root.paintDagger(ctx, item.x1, item.y1)
+                } else if (item.type === "bracket") {
+                    root.paintBracket(ctx, item)
+                } else if (item.type === "orbital") {
+                    root.paintOrbital(ctx, item)
                 } else if (item.type === "label") {
                     ctx.font = (item.bold ? "bold " : "") + Math.round(18 * root.labelScale) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
                     ctx.fillText(item.text, item.x1, item.y1)
@@ -451,6 +494,13 @@ Rectangle {
                         ctx.quadraticCurveTo(px + nx * sign * 7, py + ny * sign * 7, px, py)
                     }
                     ctx.stroke(); continue
+                }
+                if (bond.style === "partial") {
+                    // Forming/breaking bond of a transition state: dashed single line.
+                    ctx.setLineDash([6, 5])
+                    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+                    ctx.setLineDash([])
+                    continue
                 }
                 if (bond.style === "benzene") {
                     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
