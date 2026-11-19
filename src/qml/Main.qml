@@ -21,7 +21,7 @@ ApplicationWindow {
     property string reactionLabel: "conditions"
     property string arrowKind: "forward"
     // Read by main.cpp: while a dialog covers the canvas, a finger may use it.
-    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || elementPalette.popupOpen
+    readonly property bool dialogOpen: openDialog.visible || discardDialog.visible || elementPalette.popupOpen || templatesPopup.anyOpen
 
     Shortcut { sequences: [StandardKey.Undo]; onActivated: editHistory.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: editHistory.redo() }
@@ -122,6 +122,13 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         selectedRing: window.activeRing
                         onRingSelected: function(ring) { window.activeRing = ring; window.activeTool = "ring" }
+                    }
+                    Button {
+                        objectName: "templatesButton"
+                        text: "Templates…"
+                        Layout.preferredHeight: 52
+                        font.pixelSize: 17
+                        onClicked: templatesPopup.open()
                     }
                     Label { text: "Text"; font.pixelSize: 19; font.bold: true }
                     TextField {
@@ -243,6 +250,26 @@ ApplicationWindow {
         target: molecule
         function onMessage(text) { statusLine.text = text }
         function onChanged() { window.moleculeProperties = molecule.properties() }
+    }
+
+    TemplatesPopup {
+        id: templatesPopup
+        selectionCount: editor.selectedAtoms.length
+        onTemplateChosen: function(id) {
+            const center = editor.modelPoint(editor.width / 2, editor.height / 2)
+            const created = templateLibrary.place(id, center.x, center.y)
+            if (created.length > 0) {
+                editor.selectedAtoms = created
+                window.selectedAtom = created[created.length - 1]
+                close()
+            }
+        }
+        onSaveSelectionRequested: templateLibrary.saveSelection(editor.selectedAtoms)
+    }
+
+    Connections {
+        target: templateLibrary
+        function onMessage(text) { statusLine.text = text }
     }
 
     Connections {

@@ -254,6 +254,16 @@ bool ReactionLayer::saveToFile(const QString &path) {
                          {QStringLiteral("lonePairs"), lonePairs},
                          {QStringLiteral("circledCharges"), m_molecule->circledCharges()}};
     if (anySide) document.insert(QStringLiteral("bondSides"), bondSides);
+    // Drawing styles a Molfile cannot hold (Haworth bold, Newman circle), by bond index.
+    QJsonArray bondStyles;
+    bool anyStyle = false;
+    for (const Bond &bond : m_molecule->bondData()) {
+        const bool special = bond.style == QStringLiteral("bold") || bond.style == QStringLiteral("newman") ||
+                             bond.style == QStringLiteral("newmanback");
+        bondStyles.append(special ? bond.style : QString());
+        anyStyle = anyStyle || special;
+    }
+    if (anyStyle) document.insert(QStringLiteral("bondStyles"), bondStyles);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly)) return false;
     file.write(QJsonDocument(document).toJson(QJsonDocument::Indented));
@@ -294,6 +304,12 @@ bool ReactionLayer::loadFromFile(const QString &path) {
     const QJsonArray bondSides = root.value(QStringLiteral("bondSides")).toArray();
     for (int index = 0; index < parsedBonds.size() && index < bondSides.size(); ++index)
         parsedBonds[index].doubleSide = qBound(-1, bondSides.at(index).toInt(), 1);
+    const QJsonArray bondStyles = root.value(QStringLiteral("bondStyles")).toArray();
+    for (int index = 0; index < parsedBonds.size() && index < bondStyles.size(); ++index) {
+        const QString style = bondStyles.at(index).toString();
+        if (style == QStringLiteral("bold") || style == QStringLiteral("newman") || style == QStringLiteral("newmanback"))
+            parsedBonds[index].style = style;
+    }
     QVector<Atom> parsedAtoms = parsed.atomData();
     const QJsonArray lonePairs = root.value(QStringLiteral("lonePairs")).toArray();
     for (int index = 0; index < parsedAtoms.size() && index < lonePairs.size(); ++index)

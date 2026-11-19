@@ -14,6 +14,9 @@ struct GenericRingTemplate;
 class Molecule : public QObject {
     Q_OBJECT
     Q_PROPERTY(double standardBondLength READ standardBondLength CONSTANT)
+    // Radius of the circle drawn for a Newman projection's "newman" bond; "newmanback"
+    // bonds start at that circle instead of at their first atom.
+    Q_PROPERTY(double newmanCircleRadius READ newmanCircleRadius CONSTANT)
     Q_PROPERTY(bool circledCharges READ circledCharges WRITE setCircledCharges NOTIFY circledChargesChanged)
 
 public:
@@ -107,6 +110,10 @@ public:
     // CIP labels perceived from the drawing: [{atomId or bondId, kind, label, text, x, y}].
     Q_INVOKABLE QVariantList stereoDescriptors() const;
     double standardBondLength() const;
+    double newmanCircleRadius() const;
+    // Adds a fragment (bond ends are fragment atom ids), shifted by (dx, dy), as one
+    // undoable step. Returns the new atom ids in fragment order.
+    QVariantList insertFragment(const QVector<Atom> &atoms, const QVector<Bond> &bonds, double dx, double dy);
     bool circledCharges() const { return m_circledCharges; }
     void setCircledCharges(bool value);
     AtomDisplay atomDisplay(const Atom &atom) const;

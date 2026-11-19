@@ -6,6 +6,8 @@
         <file>src/qml/ElementPalette.qml</file>
         <file>src/qml/RingTemplatePicker.qml</file>
         <file>src/qml/ToolbarIcon.qml</file>
+        <file>src/qml/TemplatesPopup.qml</file>
+        <file>src/qml/TemplatePreview.qml</file>
     </qresource>
 </RCC>
 
