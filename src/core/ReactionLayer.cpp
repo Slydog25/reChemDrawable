@@ -331,6 +331,16 @@ bool ReactionLayer::saveToFile(const QString &path) {
     for (int index = 0; index < savedBonds.size(); ++index)
         if (savedBonds[index].style == QStringLiteral("partial")) partialBonds.append(index);
     if (!partialBonds.isEmpty()) document.insert(QStringLiteral("partialBonds"), partialBonds);
+    // Drawing styles a Molfile cannot hold (Haworth bold, Newman circle), by bond index.
+    QJsonArray bondStyles;
+    bool anyStyle = false;
+    for (const Bond &bond : m_molecule->bondData()) {
+        const bool special = bond.style == QStringLiteral("bold") || bond.style == QStringLiteral("newman") ||
+                             bond.style == QStringLiteral("newmanback");
+        bondStyles.append(special ? bond.style : QString());
+        anyStyle = anyStyle || special;
+    }
+    if (anyStyle) document.insert(QStringLiteral("bondStyles"), bondStyles);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly)) return false;
     file.write(QJsonDocument(document).toJson(QJsonDocument::Indented));
@@ -380,6 +390,12 @@ bool ReactionLayer::loadFromFile(const QString &path) {
     for (const QJsonValue &value : root.value(QStringLiteral("partialBonds")).toArray()) {
         const int index = value.toInt(-1);
         if (index >= 0 && index < parsedBonds.size()) { parsedBonds[index].style = QStringLiteral("partial"); parsedBonds[index].order = 1; parsedBonds[index].stereo = 0; }
+    }
+    const QJsonArray bondStyles = root.value(QStringLiteral("bondStyles")).toArray();
+    for (int index = 0; index < parsedBonds.size() && index < bondStyles.size(); ++index) {
+        const QString style = bondStyles.at(index).toString();
+        if (style == QStringLiteral("bold") || style == QStringLiteral("newman") || style == QStringLiteral("newmanback"))
+            parsedBonds[index].style = style;
     }
     QVector<Atom> parsedAtoms = parsed.atomData();
     const QJsonArray lonePairs = root.value(QStringLiteral("lonePairs")).toArray();

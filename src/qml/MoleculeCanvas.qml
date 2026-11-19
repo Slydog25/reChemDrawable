@@ -513,6 +513,26 @@ Rectangle {
                     ctx.setLineDash([])
                     continue
                 }
+                if (bond.style === "bold") {
+                    // Haworth front edge: a thick line.
+                    ctx.lineWidth = root.bondWidth * 2.3
+                    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+                    ctx.lineWidth = root.bondWidth
+                    continue
+                }
+                if (bond.style === "newman") {
+                    // Newman projection: the circle for the rear carbon.
+                    ctx.beginPath()
+                    ctx.arc((a.x + b.x) / 2, (a.y + b.y) / 2, molecule.newmanCircleRadius, 0, 2 * Math.PI)
+                    ctx.stroke()
+                    continue
+                }
+                if (bond.style === "newmanback") {
+                    // Rear bonds of a Newman projection start at the circle.
+                    const inset = length > 0 ? Math.min(molecule.newmanCircleRadius, length) / length : 0
+                    ctx.beginPath(); ctx.moveTo(a.x + dx * inset, a.y + dy * inset); ctx.lineTo(b.x, b.y); ctx.stroke()
+                    continue
+                }
                 if (bond.style === "benzene") {
                     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
                     if (bond.order === 2 && length > 0) {

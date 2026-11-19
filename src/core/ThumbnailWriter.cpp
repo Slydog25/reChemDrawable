@@ -60,6 +60,18 @@ QImage ThumbnailWriter::render(const Molecule &molecule, const QVariantList &rea
                 const QPointF p = a + (b - a) * t;
                 painter.drawLine(p + unit * w, p - unit * w);
             }
+        } else if (bond.style == QStringLiteral("newman")) {
+            const double radius = molecule.newmanCircleRadius() * scale;
+            painter.setBrush(Qt::NoBrush);
+            painter.drawEllipse((a + b) / 2.0, radius, radius);
+            painter.setBrush(ink);
+        } else if (bond.style == QStringLiteral("newmanback")) {
+            const double inset = qMin(molecule.newmanCircleRadius() * scale, length) / length;
+            painter.drawLine(a + (b - a) * inset, b);
+        } else if (bond.style == QStringLiteral("bold")) {
+            painter.setPen(QPen(ink, 3.2, Qt::SolidLine, Qt::RoundCap));
+            painter.drawLine(a, b);
+            painter.setPen(QPen(ink, 1.6, Qt::SolidLine, Qt::RoundCap));
         } else if (bond.order == 2) {
             painter.drawLine(a + unit * 2, b + unit * 2);
             painter.drawLine(a - unit * 2, b - unit * 2);

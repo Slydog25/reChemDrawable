@@ -142,4 +142,25 @@ TestCase {
         grabImage(window.contentItem).save("/workspace/build-pc/screen-mechanism-after.png")
         window.destroy()
     }
+
+    // Templates popup (amino acids and projections) and a few placed templates.
+    function test_templates() {
+        const component = Qt.createComponent("../../src/qml/Main.qml")
+        const window = component.createObject(null, { width: 1620, height: 2160 })
+        document.newDocument()
+        const ids = ["proj:newman", "proj:betaglucose", "proj:ribofuranose", "proj:derythrose", "amino:thr", "amino:cys", "amino:trp", "base:g", "base:a"]
+        for (let i = 0; i < ids.length; ++i) templateLibrary.place(ids[i], 200 + (i % 3) * 330, 160 + Math.floor(i / 3) * 280)
+        wait(300)
+        grabImage(window.contentItem).save("/workspace/build-pc/screen-templates-placed.png")
+        const popup = findChild(window, "templatesPopup")
+        popup.category = "amino"
+        popup.open()
+        wait(400)
+        grabImage(window.contentItem).save("/workspace/build-pc/screen-templates-amino.png")
+        popup.category = "projections"
+        wait(300)
+        grabImage(window.contentItem).save("/workspace/build-pc/screen-templates-proj.png")
+        popup.close()
+        window.destroy()
+    }
 }

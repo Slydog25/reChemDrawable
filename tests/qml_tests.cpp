@@ -4,6 +4,7 @@
 #include "core/EditHistory.h"
 #include "core/Molecule.h"
 #include "core/ReactionLayer.h"
+#include "core/TemplateLibrary.h"
 #include "platform/QmlJitWorkaround.h"
 
 #include <QQmlContext>
@@ -24,6 +25,7 @@ public slots:
         engine->rootContext()->setContextProperty(QStringLiteral("reactionLayer"), &m_reactionLayer);
         engine->rootContext()->setContextProperty(QStringLiteral("editHistory"), &m_history);
         engine->rootContext()->setContextProperty(QStringLiteral("document"), &m_document);
+        engine->rootContext()->setContextProperty(QStringLiteral("templateLibrary"), &m_library);
     }
 
 private:
@@ -32,6 +34,7 @@ private:
     ReactionLayer m_reactionLayer{&m_molecule};
     EditHistory m_history{&m_molecule, &m_reactionLayer};
     Document m_document{&m_molecule, &m_reactionLayer, m_directory.path()};
+    TemplateLibrary m_library{&m_molecule, m_directory.path()};
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(canvas, Setup)

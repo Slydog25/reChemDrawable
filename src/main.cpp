@@ -4,6 +4,7 @@
 #include "core/ReactionLayer.h"
 #include "platform/DisplayController.h"
 #include "platform/DisplayProtocol.h"
+#include "core/TemplateLibrary.h"
 #include "platform/InputRouter.h"
 #include "platform/PanZoomGesture.h"
 #include "platform/PenTool.h"
@@ -42,6 +43,7 @@ int main(int argc, char *argv[]) {
     EditHistory editHistory(&molecule, &reactionLayer);
     Document document(&molecule, &reactionLayer);
     DisplayController eink; // `eink` in QML: the toolbar's "Clean screen" button
+    TemplateLibrary templateLibrary(&molecule, document.directory());
     // Declared after the objects it exposes, so it is destroyed first and its
     // bindings never see them half torn down at exit.
     QQmlApplicationEngine engine;
@@ -50,6 +52,7 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("editHistory"), &editHistory);
     engine.rootContext()->setContextProperty(QStringLiteral("document"), &document);
     engine.rootContext()->setContextProperty(QStringLiteral("eink"), &eink);
+    engine.rootContext()->setContextProperty(QStringLiteral("templateLibrary"), &templateLibrary);
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
 #ifdef RECHEMDRAW_EXTERNAL_QML
     engine.load(QUrl::fromLocalFile(QCoreApplication::applicationDirPath()

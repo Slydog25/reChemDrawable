@@ -32,6 +32,7 @@ set(CORE_SOURCES
     src/core/SmilesReader.cpp
     src/core/SmilesWriter.cpp
     src/core/Stereo.cpp
+    src/core/TemplateLibrary.cpp
     src/core/SvgWriter.cpp
     src/core/ThumbnailWriter.cpp
 )
@@ -56,6 +57,7 @@ set(CORE_HEADERS
     src/core/SmilesReader.h
     src/core/SmilesWriter.h
     src/core/Stereo.h
+    src/core/TemplateLibrary.h
     src/core/SvgWriter.h
     src/core/ThumbnailWriter.h
 )
@@ -130,6 +132,7 @@ if(BUILD_TESTING)
 
     rechemdraw_add_test(display_tests tests/test_display.cpp)  # e-ink updates, refresh modes, keyboard, rotation
     rechemdraw_add_test(mechanism_tests tests/test_mechanism.cpp)  # mechanism marks, balance check, tidy
+    rechemdraw_add_test(biotemplates_tests tests/test_biotemplates.cpp)  # projections, amino acids, bases, My templates
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
     qt_add_executable(qml_tests tests/qml_tests.cpp)

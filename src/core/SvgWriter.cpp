@@ -186,6 +186,22 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
                    << "\" stroke-dasharray=\"6 5\" class=\"bond-partial\"/>\n";
             continue;
         }
+        if (bond.style == QStringLiteral("bold")) {
+            stream << "<line stroke-width=\"7\" x1=\"" << a.x << "\" y1=\"" << a.y << "\" x2=\"" << b.x << "\" y2=\"" << b.y << "\"/>\n";
+            continue;
+        }
+        if (bond.style == QStringLiteral("newman")) {
+            // Newman projection: the circle for the rear carbon, centred between the two carbons.
+            stream << "<circle fill=\"none\" cx=\"" << (a.x + b.x) / 2 << "\" cy=\"" << (a.y + b.y) / 2
+                   << "\" r=\"" << molecule.newmanCircleRadius() << "\"/>\n";
+            continue;
+        }
+        if (bond.style == QStringLiteral("newmanback")) {
+            // Rear bonds of a Newman projection start at the circle, not at the carbon.
+            const double inset = length > 0.0 ? qMin(molecule.newmanCircleRadius(), length) / length : 0.0;
+            stream << "<line x1=\"" << a.x + dx * inset << "\" y1=\"" << a.y + dy * inset << "\" x2=\"" << b.x << "\" y2=\"" << b.y << "\"/>\n";
+            continue;
+        }
         if (bond.style == QStringLiteral("benzene")) {
             stream << "<line x1=\"" << a.x << "\" y1=\"" << a.y << "\" x2=\"" << b.x << "\" y2=\"" << b.y << "\"/>\n";
             if (bond.order == 2 && length > 0.0) {

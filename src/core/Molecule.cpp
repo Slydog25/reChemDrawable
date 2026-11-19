@@ -82,7 +82,9 @@ bool isBondStyle(const QString &style) {
     return style == QStringLiteral("plain") || style == QStringLiteral("wedge") ||
            style == QStringLiteral("dash") || style == QStringLiteral("wavy") ||
            style == QStringLiteral("aromatic") || style == QStringLiteral("benzene") ||
-           style == QStringLiteral("partial");
+           style == QStringLiteral("partial") ||
+           style == QStringLiteral("bold") || style == QStringLiteral("newman") ||
+           style == QStringLiteral("newmanback");
 }
 
 int ringSides(const QString &templateName) {
@@ -1377,6 +1379,35 @@ bool Molecule::invertStereoAt(double x, double y) {
 }
 
 double Molecule::standardBondLength() const { return GeometryEngine::StandardBondLength; }
+
+double Molecule::newmanCircleRadius() const { return 0.58 * GeometryEngine::StandardBondLength; }
+
+// Adds a fragment (atom ids local to the fragment, bonds refer to them) shifted by
+// (dx, dy) as one undoable step. Used for templates.
+QVariantList Molecule::insertFragment(const QVector<Atom> &atoms, const QVector<Bond> &bonds, double dx, double dy) {
+    QVariantList created;
+    if (atoms.isEmpty()) return created;
+    const Snapshot before = snapshot();
+    QHash<int, int> ids;
+    for (Atom atom : atoms) {
+        const int newId = m_nextAtomId++;
+        ids.insert(atom.id, newId);
+        atom.id = newId;
+        atom.x += dx;
+        atom.y += dy;
+        m_atoms.append(atom);
+        created.append(newId);
+    }
+    for (Bond bond : bonds) {
+        if (!ids.contains(bond.atomA) || !ids.contains(bond.atomB)) continue;
+        bond.id = m_nextBondId++;
+        bond.atomA = ids.value(bond.atomA);
+        bond.atomB = ids.value(bond.atomB);
+        m_bonds.append(bond);
+    }
+    commit(before);
+    return created;
+}
 
 // The snapshot gets its own copy of the lists rather than sharing them (Qt's
 // containers are implicitly shared). Edits often hold a pointer into m_atoms or

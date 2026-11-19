@@ -7,6 +7,8 @@
         <file>src/qml/RingTemplatePicker.qml</file>
         <file>src/qml/ToolbarIcon.qml</file>
         <file>src/qml/PropertiesPanel.qml</file>
+        <file>src/qml/TemplatesPopup.qml</file>
+        <file>src/qml/TemplatePreview.qml</file>
     </qresource>
 </RCC>
 
