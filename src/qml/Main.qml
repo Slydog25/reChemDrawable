@@ -108,6 +108,11 @@ ApplicationWindow {
                     onElementSelected: function(element) { molecule.setAtomElement(window.selectedAtom, element) }
                     onChargeRequested: function(charge) { molecule.setAtomCharge(window.selectedAtom, charge) }
                     onGroupRequested: function(group) { molecule.stampFunctionalGroup(group, window.selectedAtom) }
+                    circledCharges: molecule.circledCharges
+                    onLonePairRequested: molecule.cycleLonePairs(window.selectedAtom)
+                    onRadicalRequested: molecule.cycleRadical(window.selectedAtom)
+                    onCircledChargesToggled: function(enabled) { molecule.circledCharges = enabled }
+                    onAbbreviationRequested: function(name) { molecule.applyAbbreviation(window.selectedAtom, name) }
                 }
                 RowLayout {
                     Layout.fillWidth: true

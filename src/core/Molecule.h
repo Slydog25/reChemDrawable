@@ -14,11 +14,28 @@ struct GenericRingTemplate;
 class Molecule : public QObject {
     Q_OBJECT
     Q_PROPERTY(double standardBondLength READ standardBondLength CONSTANT)
+    Q_PROPERTY(bool circledCharges READ circledCharges WRITE setCircledCharges NOTIFY circledChargesChanged)
 
 public:
     // Oldest undo snapshots are dropped past this many steps; each one is a full
     // copy of the structure, and the Paper Pro has 2 GB of RAM.
     static constexpr int MaxUndoSteps = 200;
+
+    // Everything needed to draw one atom, computed once so the canvas and the SVG
+    // export agree. Angles are degrees in canvas coordinates (y down).
+    struct AtomDisplay {
+        bool showLabel = false;
+        QString text;          // label without the charge, e.g. "OH", "H₂N", "¹³C", "MeO"
+        int centerIndex = 0;   // first character that sits on the atom position
+        int centerLength = 1;  // number of characters centred on the atom
+        bool labelLeft = false; // label extends to the left of the atom (H or group on the left)
+        int charge = 0;
+        QString chargeText;    // superscript form, e.g. "⁺", "²⁻"
+        QString chargeLabel;   // plain form for small-font drawing, e.g. "+", "2−"
+        QVector<double> lonePairAngles;
+        QVector<double> radicalAngles;
+        bool problem = false;
+    };
 
     explicit Molecule(QObject *parent = nullptr);
 
@@ -39,6 +56,13 @@ public:
     Q_INVOKABLE bool setAtomElement(int atomId, const QString &element);
     Q_INVOKABLE bool setAtomCharge(int atomId, int charge);
     Q_INVOKABLE bool setAtomIsotope(int atomId, int isotope);
+    Q_INVOKABLE bool cycleLonePairs(int atomId);
+    Q_INVOKABLE bool cycleRadical(int atomId);
+    // Relabels an uncharged terminal carbon as the abbreviation, or otherwise adds
+    // the group as a new atom bonded to atomId. Returns the atom now carrying it, or -1.
+    Q_INVOKABLE int applyAbbreviation(int atomId, const QString &name);
+    // [{name, label}] in palette order, label with subscript digits.
+    Q_INVOKABLE QVariantList abbreviationButtons() const;
     Q_INVOKABLE bool moveAtom(int atomId, double x, double y);
     Q_INVOKABLE bool translateAtoms(const QVariantList &atomIds, double dx, double dy);
     Q_INVOKABLE bool rotateAtoms(const QVariantList &atomIds, double degrees);
@@ -80,6 +104,9 @@ public:
     // CIP labels perceived from the drawing: [{atomId or bondId, kind, label, text, x, y}].
     Q_INVOKABLE QVariantList stereoDescriptors() const;
     double standardBondLength() const;
+    bool circledCharges() const { return m_circledCharges; }
+    void setCircledCharges(bool value);
+    AtomDisplay atomDisplay(const Atom &atom) const;
     // Hydrogens implied on a non-hydrogen atom by its element, charge, and bonds.
     int implicitHydrogens(const Atom &atom) const;
     Q_INVOKABLE QVariantMap properties() const;
@@ -92,6 +119,7 @@ public:
 
 signals:
     void changed();
+    void circledChargesChanged();
     void message(const QString &text);
     // Emitted once for every new undoable edit (not for undo/redo themselves).
     void committed();
@@ -116,7 +144,7 @@ private:
     Bond *findBond(int id);
     const Bond *findBond(int id) const;
     int valenceUsed(int atomId) const;
-    int maxValence(const QString &element, int charge = 0) const;
+    int maxValence(const QString &element, int charge = 0, int radical = 0) const;
     int maxValence(const Atom &atom) const;
     Snapshot snapshot() const;
     void restore(const Snapshot &snapshot);
@@ -130,4 +158,5 @@ private:
     QVector<Bond> m_clipboardBonds;
     int m_nextAtomId = 1;
     int m_nextBondId = 1;
+    bool m_circledCharges = false;
 };

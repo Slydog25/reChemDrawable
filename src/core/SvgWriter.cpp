@@ -166,13 +166,56 @@ QString SvgWriter::write(const Molecule &molecule, const QVariantList &reactionI
         writeArrow(stream, item);
     }
     stream << "</g>\n<g font-family=\"sans-serif\" font-size=\"20\" text-anchor=\"middle\" dominant-baseline=\"middle\">\n";
+    QString dots;
     for (const Atom &atom : atoms) {
-        if (atom.element == QStringLiteral("C") && !atom.formalCharge && !atom.isotope) continue;
-        const QString charge = atom.formalCharge == 1 ? QStringLiteral("+") : atom.formalCharge == -1 ? QStringLiteral("−") :
-            atom.formalCharge ? QStringLiteral("%1%2").arg(qAbs(atom.formalCharge)).arg(atom.formalCharge > 0 ? QStringLiteral("+") : QStringLiteral("−")) : QString();
-        stream << "<text x=\"" << atom.x << "\" y=\"" << atom.y << "\" stroke=\"white\" stroke-width=\"7\" paint-order=\"stroke\">"
-               << escaped((atom.isotope ? QString::number(atom.isotope) : QString()) + atom.element + charge) << "</text>\n";
+        const Molecule::AtomDisplay display = molecule.atomDisplay(atom);
+        constexpr double halfChar = 6.5; // rough half width of one 20px capital letter
+        double labelLeft = atom.x, labelRight = atom.x;
+        if (display.showLabel) {
+            // Same layout as MoleculeCanvas.qml: the chosen characters sit on the atom.
+            const double centerWidth = display.centerLength * 2 * halfChar;
+            const QString before = display.text.left(display.centerIndex);
+            const QString center = display.text.mid(display.centerIndex, display.centerLength);
+            const QString after = display.text.mid(display.centerIndex + display.centerLength);
+            const QString stroke = QStringLiteral(" stroke=\"white\" stroke-width=\"7\" paint-order=\"stroke\"");
+            if (!before.isEmpty())
+                stream << "<text x=\"" << atom.x - centerWidth / 2 << "\" y=\"" << atom.y << "\" text-anchor=\"end\"" << stroke << ">" << escaped(before) << "</text>\n";
+            stream << "<text x=\"" << atom.x << "\" y=\"" << atom.y << "\"" << stroke << ">" << escaped(center) << "</text>\n";
+            if (!after.isEmpty())
+                stream << "<text x=\"" << atom.x + centerWidth / 2 << "\" y=\"" << atom.y << "\" text-anchor=\"start\"" << stroke << ">" << escaped(after) << "</text>\n";
+            labelLeft = atom.x - centerWidth / 2 - before.size() * 10.0;
+            labelRight = atom.x + centerWidth / 2 + after.size() * 10.0;
+        }
+        if (display.charge) {
+            const double baseX = display.showLabel ? labelRight + 2 : atom.x + 7;
+            const double cy = atom.y - 11;
+            if (molecule.circledCharges()) {
+                const double cx = baseX + 5;
+                dots += QStringLiteral("<circle cx=\"%1\" cy=\"%2\" r=\"5\" fill=\"white\" stroke-width=\"1.2\"/>\n").arg(cx).arg(cy);
+                dots += QStringLiteral("<line x1=\"%1\" y1=\"%2\" x2=\"%3\" y2=\"%2\" stroke-width=\"1.2\"/>\n").arg(cx - 3).arg(cy).arg(cx + 3);
+                if (display.charge > 0)
+                    dots += QStringLiteral("<line x1=\"%1\" y1=\"%2\" x2=\"%1\" y2=\"%3\" stroke-width=\"1.2\"/>\n").arg(cx).arg(cy - 3).arg(cy + 3);
+            } else {
+                stream << "<text x=\"" << baseX << "\" y=\"" << atom.y - 8 << "\" font-size=\"14\" text-anchor=\"start\" stroke=\"white\" stroke-width=\"4\" paint-order=\"stroke\">"
+                       << escaped(display.chargeLabel) << "</text>\n";
+            }
+        }
+        const double ring = display.showLabel ? 16.0 : 10.0;
+        for (double angle : display.lonePairAngles) {
+            const double radians = qDegreesToRadians(angle);
+            const double cx = atom.x + ring * qCos(radians), cy = atom.y + ring * qSin(radians);
+            const double px = -qSin(radians) * 3.0, py = qCos(radians) * 3.0;
+            dots += QStringLiteral("<circle cx=\"%1\" cy=\"%2\" r=\"1.8\" stroke=\"none\"/>\n<circle cx=\"%3\" cy=\"%4\" r=\"1.8\" stroke=\"none\"/>\n")
+                        .arg(cx + px).arg(cy + py).arg(cx - px).arg(cy - py);
+        }
+        for (double angle : display.radicalAngles) {
+            const double radians = qDegreesToRadians(angle);
+            dots += QStringLiteral("<circle cx=\"%1\" cy=\"%2\" r=\"2.2\" stroke=\"none\"/>\n")
+                        .arg(atom.x + ring * qCos(radians)).arg(atom.y + ring * qSin(radians));
+        }
+        Q_UNUSED(labelLeft)
     }
+    stream << dots;
     for (const QVariant &value : reactionItems) {
         const QVariantMap item = value.toMap();
         if (item.value(QStringLiteral("type")).toString() == QStringLiteral("label")) {

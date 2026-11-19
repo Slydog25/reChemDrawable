@@ -7,6 +7,11 @@ Flow {
     signal elementSelected(string element)
     signal chargeRequested(int charge)
     signal groupRequested(string group)
+    signal lonePairRequested()
+    signal radicalRequested()
+    signal circledChargesToggled(bool enabled)
+    signal abbreviationRequested(string name)
+    property bool circledCharges: false
     spacing: 8
     Label { text: "Atoms"; font.pixelSize: 19; font.bold: true; height: 58; verticalAlignment: Text.AlignVCenter }
     Repeater {
@@ -31,4 +36,27 @@ Flow {
     Button { text: "NO₂"; width: 76; height: 58; font.pixelSize: 19; enabled: selectedAtom >= 0; onClicked: groupRequested("NO2") }
     Button { text: "tBu"; width: 76; height: 58; font.pixelSize: 19; enabled: selectedAtom >= 0; onClicked: groupRequested("tBu") }
     Button { text: "Ph"; width: 66; height: 58; font.pixelSize: 20; enabled: selectedAtom >= 0; onClicked: groupRequested("Ph") }
+    Button { objectName: "lonePairButton"; text: "LP"; width: 56; height: 58; font.pixelSize: 20; enabled: selectedAtom >= 0; onClicked: lonePairRequested() }
+    Button { objectName: "radicalButton"; text: "•"; width: 56; height: 58; font.pixelSize: 24; enabled: selectedAtom >= 0; onClicked: radicalRequested() }
+    Button {
+        objectName: "circledChargesButton"
+        text: "(+)"
+        checkable: true
+        checked: circledCharges
+        width: 66; height: 58; font.pixelSize: 20
+        onClicked: circledChargesToggled(checked)
+    }
+    Label { text: "Abbrev"; font.pixelSize: 17; font.bold: true; height: 44; verticalAlignment: Text.AlignVCenter; width: 66 }
+    Repeater {
+        model: molecule.abbreviationButtons()
+        delegate: Button {
+            text: modelData.label
+            width: Math.max(46, text.length * 12 + 18)
+            height: 44
+            padding: 4
+            font.pixelSize: 16
+            enabled: selectedAtom >= 0
+            onClicked: abbreviationRequested(modelData.name)
+        }
+    }
 }

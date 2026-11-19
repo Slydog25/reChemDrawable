@@ -1,5 +1,6 @@
 #include "MolfileReader.h"
 
+#include "Abbreviations.h"
 #include "GeometryEngine.h"
 #include "Molecule.h"
 
@@ -51,7 +52,14 @@ bool MolfileReader::readV2000(const QString &contents, Molecule *molecule, QStri
     for (int lineIndex = 4 + atomCount + bondCount; lineIndex < lines.size(); ++lineIndex) {
         const QString line = lines[lineIndex];
         if (line.startsWith(QStringLiteral("M  END"))) break;
-        if (!line.startsWith(QStringLiteral("M  CHG")) && !line.startsWith(QStringLiteral("M  ISO"))) continue;
+        if (line.startsWith(QStringLiteral("A  ")) && lineIndex + 1 < lines.size()) {
+            // Atom alias: the next line holds the label (group abbreviations).
+            const int atomIndex = line.mid(3).trimmed().toInt() - 1;
+            const QString alias = lines[++lineIndex].trimmed();
+            if (atomIndex >= 0 && atomIndex < atoms.size() && Abbreviations::isAbbreviation(alias)) atoms[atomIndex].element = alias;
+            continue;
+        }
+        if (!line.startsWith(QStringLiteral("M  CHG")) && !line.startsWith(QStringLiteral("M  ISO")) && !line.startsWith(QStringLiteral("M  RAD"))) continue;
         const QStringList parts = line.split(' ', Qt::SkipEmptyParts);
         if (parts.size() < 4) continue;
         bool countOk = false;
@@ -63,6 +71,7 @@ bool MolfileReader::readV2000(const QString &contents, Molecule *molecule, QStri
             const int value = parts[4 + pair * 2].toInt(&valueOk);
             if (!atomOk || !valueOk || atomIndex < 0 || atomIndex >= atoms.size()) continue;
             if (line.startsWith(QStringLiteral("M  CHG"))) atoms[atomIndex].formalCharge = value;
+            else if (line.startsWith(QStringLiteral("M  RAD"))) atoms[atomIndex].radical = value == 2 ? 1 : (value == 1 || value == 3) ? 2 : 0;
             else atoms[atomIndex].isotope = value;
         }
     }

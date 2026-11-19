@@ -15,6 +15,7 @@ qt_standard_project_setup()
 option(RECHEMDRAW_EXTERNAL_QML "Load QML files from beside the application binary" OFF)
 
 set(CORE_SOURCES
+    src/core/Abbreviations.cpp
     src/core/Document.cpp
     src/core/EditHistory.cpp
     src/core/Elements.cpp
@@ -46,6 +47,7 @@ set(PLATFORM_SOURCES
 )
 
 set(CORE_HEADERS
+    src/core/Abbreviations.h
     src/core/Atom.h
     src/core/Bond.h
     src/core/Document.h
@@ -154,6 +156,16 @@ if(BUILD_TESTING)
     target_link_libraries(stereo_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME stereo_tests COMMAND stereo_tests)
     set_tests_properties(stereo_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(label_tests
+        tests/test_labels.cpp
+        ${CORE_SOURCES}
+        ${CORE_HEADERS}
+    )
+    target_include_directories(label_tests PRIVATE src)
+    target_link_libraries(label_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME label_tests COMMAND label_tests)
+    set_tests_properties(label_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     # QML interaction tests: drive MoleculeCanvas with simulated taps and drags.
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)

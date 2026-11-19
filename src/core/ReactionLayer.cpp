@@ -237,17 +237,22 @@ bool ReactionLayer::saveToFile(const QString &path) {
         }
         annotations.append(object);
     }
-    // The Molfile cannot store where a double bond's second line goes; keep it by bond index.
+    // The Molfile cannot store where a double bond's second line goes, or lone
+    // pairs; keep them by bond and atom index.
     QJsonArray bondSides;
     bool anySide = false;
     for (const Bond &bond : m_molecule->bondData()) {
         bondSides.append(bond.doubleSide);
         anySide = anySide || bond.doubleSide != 0;
     }
+    QJsonArray lonePairs;
+    for (const Atom &atom : m_molecule->atomData()) lonePairs.append(atom.lonePairs);
     QJsonObject document{{QStringLiteral("format"), QStringLiteral("reChemDrawable reaction scheme")},
-                               {QStringLiteral("version"), 1},
-                               {QStringLiteral("molfile"), MolfileWriter::writeV2000(*m_molecule, info.completeBaseName())},
-                               {QStringLiteral("annotations"), annotations}};
+                         {QStringLiteral("version"), 1},
+                         {QStringLiteral("molfile"), MolfileWriter::writeV2000(*m_molecule, info.completeBaseName())},
+                         {QStringLiteral("annotations"), annotations},
+                         {QStringLiteral("lonePairs"), lonePairs},
+                         {QStringLiteral("circledCharges"), m_molecule->circledCharges()}};
     if (anySide) document.insert(QStringLiteral("bondSides"), bondSides);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly)) return false;
@@ -289,7 +294,12 @@ bool ReactionLayer::loadFromFile(const QString &path) {
     const QJsonArray bondSides = root.value(QStringLiteral("bondSides")).toArray();
     for (int index = 0; index < parsedBonds.size() && index < bondSides.size(); ++index)
         parsedBonds[index].doubleSide = qBound(-1, bondSides.at(index).toInt(), 1);
-    m_molecule->replaceContent(parsed.atomData(), parsedBonds);
+    QVector<Atom> parsedAtoms = parsed.atomData();
+    const QJsonArray lonePairs = root.value(QStringLiteral("lonePairs")).toArray();
+    for (int index = 0; index < parsedAtoms.size() && index < lonePairs.size(); ++index)
+        parsedAtoms[index].lonePairs = qBound(0, lonePairs[index].toInt(), 3);
+    m_molecule->setCircledCharges(root.value(QStringLiteral("circledCharges")).toBool(false));
+    m_molecule->replaceContent(parsedAtoms, parsedBonds);
     m_items = annotations;
     m_nextId = nextId;
     m_undo.clear(); m_redo.clear();
