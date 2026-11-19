@@ -30,22 +30,6 @@ set(CORE_SOURCES
     src/core/ThumbnailWriter.cpp
 )
 
-set(PLATFORM_SOURCES
-    src/platform/InputRouter.cpp
-    src/platform/InputRouter.h
-    src/platform/PenTool.cpp
-    src/platform/PanZoomGesture.cpp
-    src/platform/PanZoomGesture.h
-    src/platform/PenTool.h
-    src/platform/QmlJitWorkaround.h
-    src/platform/QtfbClient.cpp
-    src/platform/QtfbClient.h
-    src/platform/QuitSignals.cpp
-    src/platform/QuitSignals.h
-    src/platform/TwoFingerTap.cpp
-    src/platform/TwoFingerTap.h
-)
-
 set(CORE_HEADERS
     src/core/Abbreviations.h
     src/core/Atom.h
@@ -64,11 +48,32 @@ set(CORE_HEADERS
     src/core/ThumbnailWriter.h
 )
 
+# The chemistry core and the testable input helpers are compiled once and
+# shared by the app and every test program.
+qt_add_library(rechemdraw_core STATIC ${CORE_SOURCES} ${CORE_HEADERS})
+target_include_directories(rechemdraw_core PUBLIC src)
+target_link_libraries(rechemdraw_core PUBLIC Qt6::Core Qt6::Gui)
+
+qt_add_library(rechemdraw_platform STATIC
+    src/platform/InputRouter.cpp
+    src/platform/InputRouter.h
+    src/platform/PanZoomGesture.cpp
+    src/platform/PanZoomGesture.h
+    src/platform/PenTool.cpp
+    src/platform/PenTool.h
+    src/platform/QmlJitWorkaround.h
+    src/platform/QuitSignals.cpp
+    src/platform/QuitSignals.h
+    src/platform/TwoFingerTap.cpp
+    src/platform/TwoFingerTap.h
+)
+target_include_directories(rechemdraw_platform PUBLIC src)
+target_link_libraries(rechemdraw_platform PUBLIC Qt6::Core Qt6::Gui)
+
 qt_add_executable(reChemDrawable
     src/main.cpp
-    ${CORE_SOURCES}
-    ${CORE_HEADERS}
-    ${PLATFORM_SOURCES}
+    src/platform/QtfbClient.cpp
+    src/platform/QtfbClient.h
 )
 
 if (RECHEMDRAW_EXTERNAL_QML)
@@ -77,116 +82,32 @@ else()
     target_sources(reChemDrawable PRIVATE resources.qrc)
 endif()
 
-target_include_directories(reChemDrawable PRIVATE src)
-target_link_libraries(reChemDrawable PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
+target_link_libraries(reChemDrawable PRIVATE rechemdraw_core rechemdraw_platform Qt6::Qml Qt6::Quick)
 
 include(CTest)
 if(BUILD_TESTING)
-    find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
-    qt_add_executable(core_tests
-        tests/test_molecule.cpp
-        src/platform/InputRouter.cpp
-        src/platform/InputRouter.h
-        src/platform/PenTool.cpp
-        src/platform/PanZoomGesture.cpp
-        src/platform/PanZoomGesture.h
-        src/platform/PenTool.h
-        src/platform/TwoFingerTap.cpp
-        src/platform/TwoFingerTap.h
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(core_tests PRIVATE src)
-    target_link_libraries(core_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME core_tests COMMAND core_tests)
-    set_tests_properties(core_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Test QuickTest)
 
-    # Every edit must be fully undoable (snapshot copy-on-write regression).
-    qt_add_executable(undo_tests
-        tests/test_undo.cpp
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(undo_tests PRIVATE src)
-    target_link_libraries(undo_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME undo_tests COMMAND undo_tests)
-    set_tests_properties(undo_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # rechemdraw_add_test(<name> <source>): a QtTest program run by ctest.
+    function(rechemdraw_add_test name source)
+        qt_add_executable(${name} ${source})
+        target_link_libraries(${name} PRIVATE rechemdraw_core rechemdraw_platform Qt6::Test)
+        add_test(NAME ${name} COMMAND ${name})
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endfunction()
 
-    # Autosave, thumbnails and Open-list file handling.
-    qt_add_executable(files_tests
-        tests/test_files.cpp
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(files_tests PRIVATE src)
-    target_link_libraries(files_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME files_tests COMMAND files_tests)
-    set_tests_properties(files_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    rechemdraw_add_test(core_tests tests/test_molecule.cpp)
+    rechemdraw_add_test(undo_tests tests/test_undo.cpp)          # every edit is undoable
+    rechemdraw_add_test(files_tests tests/test_files.cpp)        # autosave, thumbnails, Open list
+    rechemdraw_add_test(arrow_tests tests/test_arrows.cpp)
+    rechemdraw_add_test(interaction_tests tests/test_interaction.cpp)
+    rechemdraw_add_test(test_templates tests/test_templates.cpp)
+    rechemdraw_add_test(stereo_tests tests/test_stereo.cpp)      # CIP R/S and E/Z
+    rechemdraw_add_test(label_tests tests/test_labels.cpp)
 
-    qt_add_executable(arrow_tests
-        tests/test_arrows.cpp
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(arrow_tests PRIVATE src)
-    target_link_libraries(arrow_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME arrow_tests COMMAND arrow_tests)
-    set_tests_properties(arrow_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-
-    qt_add_executable(interaction_tests
-        tests/test_interaction.cpp
-        src/platform/PanZoomGesture.cpp
-        src/platform/PanZoomGesture.h
-        src/platform/TwoFingerTap.cpp
-        src/platform/TwoFingerTap.h
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(interaction_tests PRIVATE src)
-    target_link_libraries(interaction_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME interaction_tests COMMAND interaction_tests)
-    set_tests_properties(interaction_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-
-    qt_add_executable(test_templates
-        tests/test_templates.cpp
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(test_templates PRIVATE src)
-    target_link_libraries(test_templates PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME test_templates COMMAND test_templates)
-    set_tests_properties(test_templates PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-
-    # CIP stereodescriptor tests.
-    qt_add_executable(stereo_tests
-        tests/test_stereo.cpp
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(stereo_tests PRIVATE src)
-    target_link_libraries(stereo_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME stereo_tests COMMAND stereo_tests)
-    set_tests_properties(stereo_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-
-    qt_add_executable(label_tests
-        tests/test_labels.cpp
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(label_tests PRIVATE src)
-    target_link_libraries(label_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME label_tests COMMAND label_tests)
-    set_tests_properties(label_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-
-    # QML interaction tests: drive MoleculeCanvas with simulated taps and drags.
-    find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)
-    qt_add_executable(qml_tests
-        tests/qml_tests.cpp
-        ${CORE_SOURCES}
-        ${CORE_HEADERS}
-    )
-    target_include_directories(qml_tests PRIVATE src)
-    target_link_libraries(qml_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickTest)
+    # QML interaction tests: drive the real QML with simulated taps and drags.
+    qt_add_executable(qml_tests tests/qml_tests.cpp)
+    target_link_libraries(qml_tests PRIVATE rechemdraw_core rechemdraw_platform Qt6::Qml Qt6::Quick Qt6::QuickTest)
     add_test(NAME qml_tests COMMAND qml_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml)
     set_tests_properties(qml_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
