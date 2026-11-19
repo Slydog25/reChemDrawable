@@ -25,7 +25,7 @@ TestCase {
     function test_cleanScreenButtonDoesNothingWithoutEink() {
         const button = findChild(window, "cleanScreenButton")
         verify(button, "toolbar has a Clean screen button")
-        compare(button.caption, "Clean screen")
+        compare(button.text, "Clean screen")
         button.clicked() // would fail the test via failOnWarning if `eink` were referenced unguarded
         wait(10)
     }

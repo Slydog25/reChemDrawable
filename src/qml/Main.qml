@@ -108,6 +108,23 @@ ApplicationWindow {
                         color: "#252525"
                         font.pixelSize: 19
                     }
+                    // Kept in the title bar so they are always reachable without scrolling the rail.
+                    Button {
+                        objectName: "cleanScreenButton"
+                        text: "Clean screen"
+                        font.pixelSize: 17
+                        Layout.preferredHeight: 48
+                        Layout.leftMargin: 12
+                        onClicked: if (typeof eink !== "undefined") eink.requestCleanScreen()
+                    }
+                    Button {
+                        objectName: "exitButton"
+                        text: "Exit"
+                        font.pixelSize: 17
+                        font.bold: true
+                        Layout.preferredHeight: 48
+                        onClicked: window.exitApp()
+                    }
                 }
 
                 ElementPalette {
@@ -204,12 +221,7 @@ ApplicationWindow {
                             }
                         }
                     }
-                }
-                // Mechanism notation lives in a popup so it does not take another row.
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    Label { text: "Mechanism"; font.pixelSize: 19; font.bold: true; height: 52; verticalAlignment: Text.AlignVCenter }
+                    // Mechanism notation (δ+/δ−, ‡, brackets, orbitals, partial bonds) opens in a popup.
                     Button {
                         objectName: "mechanismButton"
                         text: "Mechanism…"
