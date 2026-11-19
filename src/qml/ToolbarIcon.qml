@@ -200,6 +200,7 @@ Canvas {
         case "mol": page("MOL"); break
         case "svg": page("SVG"); break
         case "smiles": page("SMI"); break
+        case "export": page("EXP"); break
 
         // Editing
         case "stereo": // stereocentre: one wedge, one hashed bond, two plain bonds
