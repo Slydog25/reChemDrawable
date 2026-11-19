@@ -116,6 +116,10 @@ Canvas {
             ctx.lineWidth = 3
             break
         case "ring": hexagon(22, 22, 16); break
+        case "chain": // zig-zag with atom dots
+            path([[4, 30], [14, 14], [24, 30], [34, 14], [40, 22]])
+            dot(4, 30, 3); dot(24, 30, 3); dot(34, 14, 3)
+            break
         case "arrow": arrow(4, 22, 40, 22); break
         case "text": // serif T
             line(9, 8, 35, 8); line(22, 8, 22, 37); line(9, 8, 9, 13); line(35, 8, 35, 13); line(16, 37, 28, 37)

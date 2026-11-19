@@ -24,6 +24,11 @@ Rectangle {
     property real bondPreviewX: 0
     property real bondPreviewY: 0
     property string labelText: "conditions"
+    // Chain tool: live preview of the zig-zag being dragged out.
+    property var chainPreviewPoints: []
+    property string chainPreviewLabel: ""
+    property real chainPreviewLabelX: 0
+    property real chainPreviewLabelY: 0
     signal selectedAtomChangedByCanvas(int atomId)
     signal status(string text)
 
@@ -105,6 +110,31 @@ Rectangle {
         const offset = Math.abs(column) % 2 ? bondLength / 2 : 0
         const row = Math.round((y - offset) / bondLength)
         return { x: column * columnWidth, y: row * bondLength + offset }
+    }
+
+    // Chain parameters for a drag from (startX, startY) (model coordinates, or
+    // atom startAtom) along `samples` (the pen path in model coordinates).
+    // Grid snap restricts the axis to multiples of 60 degrees, whose +-30 degree
+    // zig-zag bonds all lie on the triangular lattice.
+    function chainParameters(startAtom, startX, startY, samples) {
+        const last = samples[samples.length - 1]
+        const dx = last.x - startX, dy = last.y - startY
+        let angle = Math.atan2(dy, dx) * 180 / Math.PI
+        if (gridSnapEnabled) angle = Math.round(angle / 60) * 60
+        const along = Math.max(0, dx * Math.cos(angle * Math.PI / 180) + dy * Math.sin(angle * Math.PI / 180))
+        const step = bondLength * Math.cos(Math.PI / 6)
+        const bonds = Math.round(along / step)
+        // Side the path bulges toward (+1 is clockwise on screen); default upward.
+        const chord = Math.sqrt(dx * dx + dy * dy)
+        let deviation = 0
+        for (let i = 0; i < samples.length && chord > 0; ++i) {
+            const d = (dx * (samples[i].y - startY) - dy * (samples[i].x - startX)) / chord
+            if (Math.abs(d) > Math.abs(deviation)) deviation = d
+        }
+        let sign = 1
+        if (Math.abs(deviation) > 8 / zoom) sign = deviation > 0 ? 1 : -1
+        else sign = Math.sin((angle - 30) * Math.PI / 180) < Math.sin((angle + 30) * Math.PI / 180) ? -1 : 1
+        return { angle: angle, count: bonds < 1 ? 0 : (startAtom >= 0 ? bonds : bonds + 1), sign: sign }
     }
 
     function placementPoint(x, y) {
@@ -371,6 +401,27 @@ Rectangle {
                     ctx.lineWidth = 3
                 }
             }
+            if (root.chainPreviewPoints.length > 1) {
+                ctx.strokeStyle = "#4d7da8"
+                ctx.lineWidth = 2
+                ctx.setLineDash([7, 5])
+                ctx.beginPath()
+                ctx.moveTo(root.chainPreviewPoints[0].x, root.chainPreviewPoints[0].y)
+                for (let k = 1; k < root.chainPreviewPoints.length; ++k)
+                    ctx.lineTo(root.chainPreviewPoints[k].x, root.chainPreviewPoints[k].y)
+                ctx.stroke()
+                ctx.setLineDash([])
+                ctx.strokeStyle = "#121212"
+                ctx.lineWidth = 3
+            }
+            if (root.chainPreviewLabel !== "") {
+                ctx.font = "bold 22px sans-serif"
+                ctx.textAlign = "left"
+                ctx.textBaseline = "middle"
+                ctx.fillStyle = "#4d7da8"
+                ctx.fillText(root.chainPreviewLabel, root.chainPreviewLabelX + 18 / root.zoom, root.chainPreviewLabelY - 22 / root.zoom)
+                ctx.fillStyle = "#121212"
+            }
             ctx.font = "20px sans-serif"
             ctx.textAlign = "center"
             ctx.textBaseline = "middle"
@@ -422,6 +473,10 @@ Rectangle {
         property int drawStartAtom: -1
         property bool drawDragged: false
         property bool skipNextClick: false
+        property int chainStartAtom: -1
+        property real chainStartX: 0
+        property real chainStartY: 0
+        property var chainSamples: []
         property real arrowStartX: 0
         property real arrowStartY: 0
         onPressed: function(mouse) {
@@ -434,6 +489,17 @@ Rectangle {
                 root.eraseAt(point.x, point.y)
                 eraseLastX = point.x; eraseLastY = point.y
                 return
+            }
+            if (activeTool === "chain") {
+                chainStartAtom = molecule.atomAt(point.x, point.y, 22 / root.zoom)
+                const startAtom = root.atomById(chainStartAtom)
+                if (startAtom) { chainStartX = startAtom.x; chainStartY = startAtom.y }
+                else {
+                    const snapped = root.placementPoint(point.x, point.y)
+                    chainStartX = snapped.x; chainStartY = snapped.y
+                }
+                chainSamples = [point]
+                skipNextClick = false
             }
             if (activeTool === "draw") {
                 drawStartAtom = molecule.atomAt(point.x, point.y, 22 / root.zoom)
@@ -469,6 +535,22 @@ Rectangle {
                 const point = root.modelPoint(mouse.x, mouse.y)
                 root.eraseAlong(eraseLastX, eraseLastY, point.x, point.y)
                 eraseLastX = point.x; eraseLastY = point.y
+                return
+            }
+            if (pressed && activeTool === "chain" && chainSamples.length > 0) {
+                const point = root.modelPoint(mouse.x, mouse.y)
+                chainSamples.push(point)
+                const params = root.chainParameters(chainStartAtom, chainStartX, chainStartY, chainSamples)
+                if (params.count >= 1) {
+                    root.chainPreviewPoints = molecule.chainPoints(chainStartAtom, chainStartX, chainStartY,
+                                                                   params.angle, params.count, params.sign)
+                    root.chainPreviewLabel = "C" + params.count
+                } else {
+                    root.chainPreviewPoints = []
+                    root.chainPreviewLabel = ""
+                }
+                root.chainPreviewLabelX = point.x; root.chainPreviewLabelY = point.y
+                drawing.requestPaint()
                 return
             }
             if (pressed && activeTool === "draw" && drawStartAtom >= 0) {
@@ -512,6 +594,25 @@ Rectangle {
                 editHistory.endGroup()
                 skipNextClick = true
                 root.selectedAtomChangedByCanvas(-1)
+                return
+            }
+            if (activeTool === "chain" && chainSamples.length > 0) {
+                const point = root.modelPoint(mouse.x, mouse.y)
+                chainSamples.push(point)
+                const params = root.chainParameters(chainStartAtom, chainStartX, chainStartY, chainSamples)
+                if (params.count >= 1) {
+                    if (molecule.addChain(chainStartAtom, chainStartX, chainStartY, params.angle, params.count, params.sign) >= 0)
+                        status("Chain of " + params.count + " carbons added.")
+                } else {
+                    status("Drag to draw a chain.")
+                }
+                chainSamples = []
+                chainStartAtom = -1
+                root.chainPreviewPoints = []
+                root.chainPreviewLabel = ""
+                root.selectedAtomChangedByCanvas(-1)
+                skipNextClick = true
+                drawing.requestPaint()
                 return
             }
             if (activeTool === "draw" && drawStartAtom >= 0 && drawDragged) {

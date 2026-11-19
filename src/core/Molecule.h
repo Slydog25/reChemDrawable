@@ -9,6 +9,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+struct GenericRingTemplate;
+
 class Molecule : public QObject {
     Q_OBJECT
     Q_PROPERTY(double standardBondLength READ standardBondLength CONSTANT)
@@ -54,6 +56,14 @@ public:
     Q_INVOKABLE bool stampRing(const QString &templateName, double x, double y);
     Q_INVOKABLE bool stampRingAtAtom(const QString &templateName, int atomId, double x, double y);
     Q_INVOKABLE bool stampRingAtBond(const QString &templateName, int bondId, double x, double y);
+    // Zig-zag chain: bonds one standard length long at +-30 degrees to the axis
+    // (angle, in degrees, y down), first bend toward firstBendSign (+1 clockwise
+    // on screen, -1 anticlockwise). chainPoints() lists the atom positions
+    // (start atom first when startAtomId >= 0) so the UI can preview them;
+    // addChain() creates `count` new carbons as one undoable step and returns
+    // the last new atom's id, or -1 (with a message) if the start atom is full.
+    Q_INVOKABLE QVariantList chainPoints(int startAtomId, double x, double y, double angle, int count, int firstBendSign) const;
+    Q_INVOKABLE int addChain(int startAtomId, double x, double y, double angle, int count, int firstBendSign);
     Q_INVOKABLE bool stampFunctionalGroup(const QString &group, int atomId);
     Q_INVOKABLE bool cleanUpStructure();
     Q_INVOKABLE bool canAddBond(int atomA, int atomB, int order = 1) const;
@@ -85,6 +95,11 @@ private:
         int nextAtomId = 1;
         int nextBondId = 1;
     };
+
+    static const GenericRingTemplate *findRingTemplate(const QString &name);
+    // Stamps a generic template (heterocycle, chair, indole): free at (x, y) when
+    // anchorId < 0, else as a substituent bonded to anchorId.
+    bool stampTemplate(const GenericRingTemplate &ring, int anchorId, double x, double y);
 
     Atom *findAtom(int id);
     const Atom *findAtom(int id) const;
