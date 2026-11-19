@@ -101,6 +101,17 @@ if(BUILD_TESTING)
     add_test(NAME core_tests COMMAND core_tests)
     set_tests_properties(core_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+    # Every edit must be fully undoable (snapshot copy-on-write regression).
+    qt_add_executable(undo_tests
+        tests/test_undo.cpp
+        ${CORE_SOURCES}
+        ${CORE_HEADERS}
+    )
+    target_include_directories(undo_tests PRIVATE src)
+    target_link_libraries(undo_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME undo_tests COMMAND undo_tests)
+    set_tests_properties(undo_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     # Autosave, thumbnails and Open-list file handling.
     qt_add_executable(files_tests
         tests/test_files.cpp

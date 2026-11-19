@@ -1249,7 +1249,14 @@ QVariantList Molecule::stereoDescriptors() const {
 
 double Molecule::standardBondLength() const { return GeometryEngine::StandardBondLength; }
 
-Molecule::Snapshot Molecule::snapshot() const { return {m_atoms, m_bonds, m_nextAtomId, m_nextBondId}; }
+// The snapshot gets its own copy of the lists rather than sharing them (Qt's
+// containers are implicitly shared). Edits often hold a pointer into m_atoms or
+// m_bonds taken before snapshot(); with a shared buffer, writing through it
+// would change the snapshot too and Undo would restore the edited value.
+Molecule::Snapshot Molecule::snapshot() const {
+    return {QVector<Atom>(m_atoms.cbegin(), m_atoms.cend()), QVector<Bond>(m_bonds.cbegin(), m_bonds.cend()),
+            m_nextAtomId, m_nextBondId};
+}
 void Molecule::restore(const Snapshot &value) { m_atoms = value.atoms; m_bonds = value.bonds; m_nextAtomId = value.nextAtomId; m_nextBondId = value.nextBondId; }
 void Molecule::commit(const Snapshot &before) {
     m_undo.append(before);

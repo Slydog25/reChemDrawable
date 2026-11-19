@@ -331,7 +331,9 @@ void ReactionLayer::clear() {
     m_items.clear(); commit(before);
 }
 
-ReactionLayer::Snapshot ReactionLayer::snapshot() const { return {m_items, m_nextId}; }
+// A real copy, not a shared one: translateItem() writes through a reference
+// taken before the snapshot (see Molecule::snapshot()).
+ReactionLayer::Snapshot ReactionLayer::snapshot() const { return {QVector<Item>(m_items.cbegin(), m_items.cend()), m_nextId}; }
 void ReactionLayer::commit(const Snapshot &before) {
     m_undo.append(before);
     if (m_undo.size() > MaxUndoSteps) m_undo.removeFirst();
