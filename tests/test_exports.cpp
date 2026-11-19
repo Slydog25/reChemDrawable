@@ -178,7 +178,7 @@ private slots:
         const QJsonObject content = QJsonDocument::fromJson(readAll(library.filePath(uuid + ".content"))).object();
         QCOMPARE(content.value("fileType").toString(), QString("pdf"));
         QCOMPARE(content.value("pageCount").toInt(), 1);
-        QVERIFY(messages.last().first().toString().contains("xochitl"));
+        QVERIFY(messages.last().first().toString().contains("restarts"));
     }
 
     void libraryExportReportsMissingFolderAndEmptyDrawing() {
