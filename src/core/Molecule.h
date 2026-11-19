@@ -98,6 +98,9 @@ public:
     Q_INVOKABLE int addChain(int startAtomId, double x, double y, double angle, int count, int firstBendSign);
     Q_INVOKABLE bool stampFunctionalGroup(const QString &group, int atomId);
     Q_INVOKABLE bool cleanUpStructure();
+    // Adds the structure for a SMILES string, centred at (x, y), as one undoable
+    // step. On a parse error nothing changes and message() explains why.
+    Q_INVOKABLE bool importSmiles(const QString &smiles, double x, double y);
     Q_INVOKABLE bool canAddBond(int atomA, int atomB, int order = 1) const;
     Q_INVOKABLE QString formula() const;
     Q_INVOKABLE QString smiles() const;

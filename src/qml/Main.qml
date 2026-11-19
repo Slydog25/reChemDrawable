@@ -126,12 +126,27 @@ ApplicationWindow {
                     Label { text: "Text"; font.pixelSize: 19; font.bold: true }
                     TextField {
                         id: reactionLabelField
+                        objectName: "reactionLabelField"
                         Layout.preferredWidth: 230
                         Layout.preferredHeight: 52
                         text: window.reactionLabel
                         placeholderText: "conditions"
                         font.pixelSize: 19
                         onTextChanged: window.reactionLabel = text
+                    }
+                    Button {
+                        objectName: "importSmilesButton"
+                        text: "Import SMILES"
+                        Layout.preferredHeight: 52
+                        font.pixelSize: 17
+                        enabled: reactionLabelField.text.trim().length > 0
+                        onClicked: {
+                            const center = editor.modelPoint(editor.width / 2, editor.height / 2)
+                            if (molecule.importSmiles(reactionLabelField.text, center.x, center.y)) {
+                                window.selectedAtom = -1
+                                editor.fitToContent()
+                            }
+                        }
                     }
                     Item { Layout.fillWidth: true }
                 }
@@ -359,7 +374,7 @@ ApplicationWindow {
                         Label {
                             anchors.centerIn: parent
                             visible: modelData.thumbnail === ""
-                            text: modelData.kind === "molfile" ? ".mol" : "no preview"
+                            text: modelData.kind === "molfile" ? ".mol" : modelData.kind === "smiles" ? ".smi" : "no preview"
                             font.pixelSize: 16
                             color: "#666"
                         }
@@ -372,7 +387,7 @@ ApplicationWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 4
                         Label { width: parent.width; text: modelData.name; font.pixelSize: 22; font.bold: true; elide: Text.ElideRight }
-                        Label { width: parent.width; text: modelData.modified + (modelData.kind === "molfile" ? "   .mol" : ""); font.pixelSize: 16; color: "#444"; elide: Text.ElideRight }
+                        Label { width: parent.width; text: modelData.modified + (modelData.kind === "molfile" ? "   .mol" : modelData.kind === "smiles" ? "   .smi" : ""); font.pixelSize: 16; color: "#444"; elide: Text.ElideRight }
                         Label { width: parent.width; visible: modelData.formula !== ""; text: modelData.formula; font.pixelSize: 16; color: "#444"; elide: Text.ElideRight }
                     }
                     Row {

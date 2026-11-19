@@ -20,10 +20,12 @@ set(CORE_SOURCES
     src/core/EditHistory.cpp
     src/core/Elements.cpp
     src/core/GeometryEngine.cpp
+    src/core/Layout2D.cpp
     src/core/Molecule.cpp
     src/core/MolfileReader.cpp
     src/core/MolfileWriter.cpp
     src/core/ReactionLayer.cpp
+    src/core/SmilesReader.cpp
     src/core/SmilesWriter.cpp
     src/core/Stereo.cpp
     src/core/SvgWriter.cpp
@@ -38,10 +40,12 @@ set(CORE_HEADERS
     src/core/EditHistory.h
     src/core/Elements.h
     src/core/GeometryEngine.h
+    src/core/Layout2D.h
     src/core/Molecule.h
     src/core/MolfileReader.h
     src/core/MolfileWriter.h
     src/core/ReactionLayer.h
+    src/core/SmilesReader.h
     src/core/SmilesWriter.h
     src/core/Stereo.h
     src/core/SvgWriter.h
@@ -104,6 +108,7 @@ if(BUILD_TESTING)
     rechemdraw_add_test(test_templates tests/test_templates.cpp)
     rechemdraw_add_test(stereo_tests tests/test_stereo.cpp)      # CIP R/S and E/Z
     rechemdraw_add_test(label_tests tests/test_labels.cpp)
+    rechemdraw_add_test(smiles_import_tests tests/test_smiles_import.cpp)  # parser, 2D layout, .smi
 
     # QML interaction tests: drive the real QML with simulated taps and drags.
     qt_add_executable(qml_tests tests/qml_tests.cpp)
