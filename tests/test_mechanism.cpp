@@ -104,6 +104,16 @@ private slots:
     }
 
     void partialBondsAreIgnoredByHydrogensAndSmiles() {
+        // SN2 transition state Br···CH3···OH: three H on carbon, none on Br, one on O.
+        {
+            Molecule ts;
+            const int br = ts.addAtom(0, 0, "Br"), c = ts.addAtom(48, 0), o = ts.addAtom(96, 0, "O");
+            QVERIFY(ts.setBondStyle(ts.addBond(br, c), "partial"));
+            QVERIFY(ts.setBondStyle(ts.addBond(c, o), "partial"));
+            QCOMPARE(ts.implicitHydrogens(ts.atomData()[0]), 0);
+            QCOMPARE(ts.implicitHydrogens(ts.atomData()[1]), 3);
+            QCOMPARE(ts.implicitHydrogens(ts.atomData()[2]), 1);
+        }
         Molecule molecule;
         const int c1 = molecule.addAtom(0, 0), c2 = molecule.addAtom(48, 0);
         const int bond = molecule.addBond(c1, c2);
@@ -111,7 +121,7 @@ private slots:
         QCOMPARE(molecule.smiles(), QStringLiteral("CC"));
         QVERIFY(molecule.setBondStyle(bond, "partial"));
         QCOMPARE(molecule.bondData().first().order, 1);
-        QCOMPARE(molecule.formula(), QStringLiteral("C2H8"));   // no valence used: both carbons fill up
+        QCOMPARE(molecule.formula(), QStringLiteral("C2H6"));   // half a bond each for H: two CH3 ends
         QCOMPARE(molecule.smiles(), QStringLiteral("C.C"));      // not a bond in the SMILES
         QVERIFY(molecule.canAddBond(c1, molecule.addAtom(0, 48), 3)); // full valence still free
         // Style tool cycle reaches it from aromatic and wraps around.

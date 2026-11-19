@@ -1241,7 +1241,11 @@ int Molecule::implicitHydrogens(const Atom &atom) const {
     double sum = 0.0;
     for (const Bond &bond : m_bonds) {
         if (bond.atomA != atom.id && bond.atomB != atom.id) continue;
-        if (bond.style == QStringLiteral("partial")) continue;
+        // A partial (forming/breaking) bond counts as half a bond here, which gives
+        // the textbook transition-state labels: Br···C shows Br (no H), HO···C shows
+        // HO, and the central carbon of Br···CH3···OH keeps its three hydrogens.
+        // It still uses no valence (valenceUsed), so a five-coordinate TS is allowed.
+        if (bond.style == QStringLiteral("partial")) { sum += 0.5; continue; }
         sum += bond.style == QStringLiteral("aromatic") ? 1.5 : bond.order;
     }
     if (Abbreviations::isAbbreviation(atom.element)) return 0;
