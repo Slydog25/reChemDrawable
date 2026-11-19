@@ -408,7 +408,7 @@ Rectangle {
                 ctx.moveTo(arrowPreviewPath[0].x, arrowPreviewPath[0].y)
                 for (let i = 1; i < arrowPreviewPath.length; ++i) ctx.lineTo(arrowPreviewPath[i].x, arrowPreviewPath[i].y)
                 ctx.stroke()
-                ctx.lineWidth = 3
+                ctx.lineWidth = root.bondWidth
             }
             for (let i = 0; i < bondItems.length; ++i) {
                 const bond = bondItems[i]
